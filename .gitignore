@@ -1,0 +1,10 @@
+# Pebble build artifacts
+build/
+.lock-waf*
+*.pbw
+*.elf
+*.bin
+
+# OS files
+.DS_Store
+Thumbs.db
