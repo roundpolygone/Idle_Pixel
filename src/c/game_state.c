@@ -219,6 +219,42 @@ void game_state_save(void) {
   persist_write_data(PERSIST_KEY_GAME_DATA, &s_game.data, sizeof(GameSaveData));
 }
 
+void game_state_hard_reset(void) {
+  persist_delete(PERSIST_KEY_GAME_DATA);
+  memset(&s_game, 0, sizeof(GameState));
+  prv_shuffle_random_order();
+
+  s_game.data.version = SAVE_VERSION;
+  s_game.data.current_pixels = 0;
+  s_game.data.fills_count = 0;
+  s_game.data.max_unlock_milestone = 0;
+  s_game.data.progress_ms = 0;
+  s_game.data.currency = 0;
+  s_game.data.prestige_level = 0;
+  s_game.data.unlock_points = 0;
+  s_game.data.upgrade_fill_speed_lvl = 0;
+  s_game.data.upgrade_boost_power_lvl = 0;
+  s_game.data.upgrade_boost_len_lvl = 0;
+  s_game.data.upgrade_offline_cap_lvl = 0;
+  s_game.data.unlocked_bg_colors = 1;
+  s_game.data.selected_bg_color_index = 0;
+  s_game.data.unlocked_fill_orders = 1;
+  s_game.data.selected_fill_order = FILL_ORDER_NORMAL;
+  s_game.data.unlocked_fonts = 1;
+  s_game.data.selected_font = 0;
+  s_game.data.unlocked_clock_styles = 1;
+  s_game.data.selected_clock_style = 0;
+  s_game.data.option_vibration = true;
+  s_game.data.option_analog_clock = false;
+  s_game.data.option_24h = false;
+  s_game.data.last_save_time = time(NULL);
+
+  s_game.boost_remaining_ms = 0;
+  s_game.offline_summary.should_show = false;
+
+  game_state_save();
+}
+
 void game_state_activate_boost(void) {
   s_game.boost_remaining_ms = game_state_get_boost_duration_ms();
 }

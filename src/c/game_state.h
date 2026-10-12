@@ -82,6 +82,7 @@ typedef struct {
 
 void game_state_init(void);
 void game_state_save(void);
+void game_state_hard_reset(void);
 void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_completed);
 void game_state_activate_boost(void);
 bool game_state_can_prestige(void);
