@@ -7,6 +7,7 @@
 #define MAX_FILLS 64
 
 #define INITIAL_BASE_INTERVAL_MS 5000 // 5.0s initial fill speed
+#define MIN_BASE_INTERVAL_MS 500      // 500ms safety floor
 #define TICK_INTERVAL_MS 100          // 10 Hz game loop
 
 #define SAVE_VERSION 4
@@ -45,7 +46,7 @@ typedef struct __attribute__((__packed__)) {
   uint32_t unlock_points;        // currency to spend on unlocks
 
   // Store Upgrades
-  uint8_t upgrade_fill_speed_lvl;  // lvl 0 = 5000ms (-250ms per lvl, min 400ms)
+  uint8_t upgrade_fill_speed_lvl;  // multiplicative curve (5000 / (1 + 0.10 * lvl))
   uint8_t upgrade_boost_power_lvl; // lvl 0 = +20% boost (+20% per lvl)
   uint8_t upgrade_boost_len_lvl;   // lvl 0 = 1.0s (+250ms per lvl)
   uint8_t upgrade_offline_cap_lvl; // lvl 0 = 0m (locked), lvl 1 = 15m (+15m per lvl)
@@ -99,6 +100,15 @@ void game_state_get_pps(uint32_t *out_whole, uint32_t *out_hundredths);
 
 // Fill order mapping
 uint8_t game_state_get_order_index(uint8_t row, uint8_t col);
+
+// Exponential cost calculators
+uint32_t game_state_calc_cost_1_5x(uint8_t level);
+uint32_t game_state_calc_cost_2x(uint8_t level);
+
+uint32_t game_state_get_fill_speed_cost(void);
+uint32_t game_state_get_boost_power_cost(void);
+uint32_t game_state_get_boost_len_cost(void);
+uint32_t game_state_get_offline_cap_cost(void);
 
 // Store actions
 bool game_state_buy_fill_speed(void);

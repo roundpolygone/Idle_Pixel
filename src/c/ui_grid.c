@@ -42,6 +42,46 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
   footer_y = grid_y + grid_h + 2;
 #endif
 
+  // Sparkles in the background when active boost
+  if (game->boost_remaining_ms > 0) {
+    static const int16_t s_sparkle_offsets[16][2] = {
+      { 6, 8 }, { 24, 12 }, { 120, 10 }, { 136, 14 },
+      { 8, 50 }, { 136, 52 }, { 6, 90 }, { 138, 92 },
+      { 8, 130 }, { 136, 132 }, { 18, 158 }, { 40, 162 },
+      { 72, 164 }, { 104, 160 }, { 128, 158 }, { 70, 8 }
+    };
+
+    uint32_t phase = (game->boost_remaining_ms / 100);
+
+    for (int i = 0; i < 16; i++) {
+      if (((i + phase) % 3) == 0) {
+        continue;
+      }
+
+      int16_t sx = s_sparkle_offsets[i][0];
+      int16_t sy = s_sparkle_offsets[i][1];
+
+      if (bounds.size.w > 144) {
+        sx = (sx * bounds.size.w) / 144;
+        sy = (sy * bounds.size.h) / 168;
+      }
+
+      if (sx >= grid_x - 3 && sx <= grid_x + grid_w + 3 &&
+          sy >= grid_y - 3 && sy <= grid_y + grid_h + 3) {
+        continue;
+      }
+
+      GColor spark_col = ((i + phase) % 2 == 0) ? GColorWhite : GColorYellow;
+      graphics_context_set_stroke_color(ctx, spark_col);
+
+      graphics_draw_pixel(ctx, GPoint(sx, sy));
+      graphics_draw_pixel(ctx, GPoint(sx + 1, sy));
+      graphics_draw_pixel(ctx, GPoint(sx - 1, sy));
+      graphics_draw_pixel(ctx, GPoint(sx, sy + 1));
+      graphics_draw_pixel(ctx, GPoint(sx, sy - 1));
+    }
+  }
+
   // 1. Header: Fill Counter
   char header_buf[32];
   snprintf(header_buf, sizeof(header_buf), "FILL %lu / %d",
@@ -137,9 +177,9 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
                        NULL);
   }
 
-  // Navigation hint line
+  // Navigation hint line showing UP: Clock, MID: Menu, DOWN: Boost
   graphics_context_set_text_color(ctx, is_dark ? GColorLightGray : GColorDarkGray);
-  graphics_draw_text(ctx, "[v] Boost | MID: Menu",
+  graphics_draw_text(ctx, "^ Clock | = Menu | v Boost",
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      GRect(0, footer_y + 13, bounds.size.w, 14),
                      GTextOverflowModeWordWrap,

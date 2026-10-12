@@ -2,6 +2,7 @@
 #include "game_state.h"
 #include "ui_grid.h"
 #include "ui_menu.h"
+#include "ui_clock.h"
 #include "ui_offline_summary.h"
 
 static Window *s_window;
@@ -23,6 +24,11 @@ static void prv_timer_callback(void *data) {
   s_tick_timer = app_timer_register(TICK_INTERVAL_MS, prv_timer_callback, NULL);
 }
 
+static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  // Shortcut to clock page
+  ui_clock_show();
+}
+
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
   ui_menu_show();
 }
@@ -33,6 +39,7 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context)
 }
 
 static void prv_click_config_provider(void *context) {
+  window_single_click_subscribe(BUTTON_ID_UP, prv_up_click_handler);
   window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
   window_single_click_subscribe(BUTTON_ID_DOWN, prv_down_click_handler);
 }

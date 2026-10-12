@@ -47,34 +47,43 @@ static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
   switch (cell_index->row) {
     case 0: {
       uint32_t interval = game_state_get_base_interval_ms();
-      snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (%lu.%lus) | 1¢",
+      uint32_t cost = game_state_get_fill_speed_cost();
+      snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (%lu.%lus) | Cost: %lu¢",
                game->data.upgrade_fill_speed_lvl,
-               (unsigned long)(interval / 1000), (unsigned long)((interval % 1000) / 100));
+               (unsigned long)(interval / 1000), (unsigned long)((interval % 1000) / 100),
+               (unsigned long)cost);
       menu_cell_basic_draw(ctx, cell_layer, "Auto-Fill Speed", sub_buf, NULL);
       break;
     }
     case 1: {
       uint32_t boost_pct = game_state_get_boost_percent();
-      snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (+%lu%% speed) | 1¢",
-               game->data.upgrade_boost_power_lvl, (unsigned long)boost_pct);
+      uint32_t cost = game_state_get_boost_power_cost();
+      snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (+%lu%%) | Cost: %lu¢",
+               game->data.upgrade_boost_power_lvl, (unsigned long)boost_pct,
+               (unsigned long)cost);
       menu_cell_basic_draw(ctx, cell_layer, "Boost Power", sub_buf, NULL);
       break;
     }
     case 2: {
       uint32_t len_ms = game_state_get_boost_duration_ms();
-      snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (%lu.%lus) | 1¢",
+      uint32_t cost = game_state_get_boost_len_cost();
+      snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (%lu.%lus) | Cost: %lu¢",
                game->data.upgrade_boost_len_lvl,
-               (unsigned long)(len_ms / 1000), (unsigned long)((len_ms % 1000) / 100));
+               (unsigned long)(len_ms / 1000), (unsigned long)((len_ms % 1000) / 100),
+               (unsigned long)cost);
       menu_cell_basic_draw(ctx, cell_layer, "Boost Length", sub_buf, NULL);
       break;
     }
     case 3: {
+      uint32_t cost = game_state_get_offline_cap_cost();
       if (!game_state_is_offline_unlocked()) {
-        menu_cell_basic_draw(ctx, cell_layer, "Max Idle Time", "Locked (Unlock 15m) | 1¢", NULL);
+        snprintf(sub_buf, sizeof(sub_buf), "Unlock 15m | Cost: %lu¢", (unsigned long)cost);
+        menu_cell_basic_draw(ctx, cell_layer, "Max Idle Time", sub_buf, NULL);
       } else {
         uint32_t off_min = game_state_get_max_offline_sec() / 60;
-        snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (%lum cap) | 1¢",
-                 game->data.upgrade_offline_cap_lvl, (unsigned long)off_min);
+        snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (%lum) | Cost: %lu¢",
+                 game->data.upgrade_offline_cap_lvl, (unsigned long)off_min,
+                 (unsigned long)cost);
         menu_cell_basic_draw(ctx, cell_layer, "Max Idle Time", sub_buf, NULL);
       }
       break;

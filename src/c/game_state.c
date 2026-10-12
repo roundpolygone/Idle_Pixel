@@ -38,12 +38,12 @@ static void prv_shuffle_random_order(void) {
 }
 
 uint32_t game_state_get_base_interval_ms(void) {
-  int reduction = (int)s_game.data.upgrade_fill_speed_lvl * 250;
-  int interval = (int)INITIAL_BASE_INTERVAL_MS - reduction;
-  if (interval < 400) {
-    interval = 400; // minimum interval cap
+  // Interval = 5000 / (1 + 0.10 * level) = 50000 / (10 + level)
+  uint32_t interval = 50000 / (10 + (uint32_t)s_game.data.upgrade_fill_speed_lvl);
+  if (interval < MIN_BASE_INTERVAL_MS) {
+    interval = MIN_BASE_INTERVAL_MS; // 500ms safety floor
   }
-  return (uint32_t)interval;
+  return interval;
 }
 
 bool game_state_is_boost_unlocked(void) {
@@ -104,6 +104,38 @@ uint8_t game_state_get_order_index(uint8_t row, uint8_t col) {
     default:
       return (uint8_t)(row * 8 + col);
   }
+}
+
+// -------------------------------------------------------------
+// Exponential Cost Scaling
+// -------------------------------------------------------------
+uint32_t game_state_calc_cost_1_5x(uint8_t level) {
+  uint32_t cost = 1;
+  for (uint8_t i = 0; i < level; i++) {
+    cost = (cost * 3 + 1) / 2; // iterative 1.5x with rounding
+  }
+  return cost;
+}
+
+uint32_t game_state_calc_cost_2x(uint8_t level) {
+  if (level >= 30) return 1000000000;
+  return (uint32_t)(1UL << level);
+}
+
+uint32_t game_state_get_fill_speed_cost(void) {
+  return game_state_calc_cost_1_5x(s_game.data.upgrade_fill_speed_lvl);
+}
+
+uint32_t game_state_get_boost_power_cost(void) {
+  return game_state_calc_cost_1_5x(s_game.data.upgrade_boost_power_lvl);
+}
+
+uint32_t game_state_get_boost_len_cost(void) {
+  return game_state_calc_cost_1_5x(s_game.data.upgrade_boost_len_lvl);
+}
+
+uint32_t game_state_get_offline_cap_cost(void) {
+  return game_state_calc_cost_2x(s_game.data.upgrade_offline_cap_lvl);
 }
 
 void game_state_init(void) {
@@ -252,9 +284,13 @@ uint32_t game_state_prestige(void) {
   return earned;
 }
 
+// -------------------------------------------------------------
+// Store Upgrades (Exponential Cost Scaling)
+// -------------------------------------------------------------
 bool game_state_buy_fill_speed(void) {
-  if (s_game.data.currency >= 1) {
-    s_game.data.currency -= 1;
+  uint32_t cost = game_state_get_fill_speed_cost();
+  if (s_game.data.currency >= cost) {
+    s_game.data.currency -= cost;
     s_game.data.upgrade_fill_speed_lvl++;
     game_state_save();
     return true;
@@ -263,8 +299,9 @@ bool game_state_buy_fill_speed(void) {
 }
 
 bool game_state_buy_boost_power(void) {
-  if (s_game.data.currency >= 1) {
-    s_game.data.currency -= 1;
+  uint32_t cost = game_state_get_boost_power_cost();
+  if (s_game.data.currency >= cost) {
+    s_game.data.currency -= cost;
     s_game.data.upgrade_boost_power_lvl++;
     game_state_save();
     return true;
@@ -273,8 +310,9 @@ bool game_state_buy_boost_power(void) {
 }
 
 bool game_state_buy_boost_len(void) {
-  if (s_game.data.currency >= 1) {
-    s_game.data.currency -= 1;
+  uint32_t cost = game_state_get_boost_len_cost();
+  if (s_game.data.currency >= cost) {
+    s_game.data.currency -= cost;
     s_game.data.upgrade_boost_len_lvl++;
     game_state_save();
     return true;
@@ -283,8 +321,9 @@ bool game_state_buy_boost_len(void) {
 }
 
 bool game_state_buy_offline_cap(void) {
-  if (s_game.data.currency >= 1) {
-    s_game.data.currency -= 1;
+  uint32_t cost = game_state_get_offline_cap_cost();
+  if (s_game.data.currency >= cost) {
+    s_game.data.currency -= cost;
     s_game.data.upgrade_offline_cap_lvl++;
     game_state_save();
     return true;
