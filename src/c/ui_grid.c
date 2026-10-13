@@ -52,43 +52,40 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
   footer_y = grid_y + grid_h + 2;
 #endif
 
-  // 3. Sparkles in the background during active boost
-  if (game->boost_remaining_ms > 0) {
-    static const int16_t s_sparkle_offsets[16][2] = {
-      { 6, 8 }, { 24, 12 }, { 120, 10 }, { 136, 14 },
-      { 8, 50 }, { 136, 52 }, { 6, 90 }, { 138, 92 },
-      { 8, 130 }, { 136, 132 }, { 18, 158 }, { 40, 162 },
-      { 72, 164 }, { 104, 160 }, { 128, 158 }, { 70, 8 }
-    };
+  // 3. Liquid ink filling up the background like liquid during active boost
+  if (game->current_boost_milli > 0) {
+    GColor ink_color = game_state_get_ink_color();
+    static uint16_t s_ink_wave_phase = 0;
+    s_ink_wave_phase += 1400; // gentle undulating wave motion
 
-    uint32_t phase = (game->boost_remaining_ms / 100);
+    int liquid_h = (int)(((int32_t)bounds.size.h * (int32_t)game->current_boost_milli) / 60000);
+    if (liquid_h > bounds.size.h) {
+      liquid_h = bounds.size.h;
+    }
+    if (liquid_h < 4) {
+      liquid_h = 4;
+    }
 
-    for (int i = 0; i < 16; i++) {
-      if (((i + phase) % 3) == 0) {
-        continue;
+    int surface_y = bounds.size.h - liquid_h;
+    int solid_fill_y = surface_y + 4;
+
+    graphics_context_set_stroke_color(ctx, ink_color);
+    for (int x = 0; x < bounds.size.w; x++) {
+      int32_t angle = (x * 1100) + s_ink_wave_phase;
+      int wave_offset = (sin_lookup(angle) * 3) / TRIG_MAX_RATIO;
+      int y_top = surface_y + wave_offset;
+      if (y_top < 0) {
+        y_top = 0;
       }
-
-      int16_t sx = s_sparkle_offsets[i][0];
-      int16_t sy = s_sparkle_offsets[i][1];
-
-      if (bounds.size.w > 144) {
-        sx = (sx * bounds.size.w) / 144;
-        sy = (sy * bounds.size.h) / 168;
+      if (y_top < bounds.size.h) {
+        int y_bottom = (solid_fill_y < bounds.size.h) ? solid_fill_y : bounds.size.h;
+        graphics_draw_line(ctx, GPoint(x, y_top), GPoint(x, y_bottom));
       }
+    }
 
-      if (sx >= bar_x - 3 && sx <= grid_x + grid_w + 3 &&
-          sy >= grid_y - 3 && sy <= grid_y + grid_h + 3) {
-        continue;
-      }
-
-      GColor spark_col = ((i + phase) % 2 == 0) ? (is_dark ? GColorWhite : GColorCobaltBlue) : (is_dark ? GColorYellow : GColorOrange);
-      graphics_context_set_stroke_color(ctx, spark_col);
-
-      graphics_draw_pixel(ctx, GPoint(sx, sy));
-      graphics_draw_pixel(ctx, GPoint(sx + 1, sy));
-      graphics_draw_pixel(ctx, GPoint(sx - 1, sy));
-      graphics_draw_pixel(ctx, GPoint(sx, sy + 1));
-      graphics_draw_pixel(ctx, GPoint(sx, sy - 1));
+    if (solid_fill_y < bounds.size.h) {
+      graphics_context_set_fill_color(ctx, ink_color);
+      graphics_fill_rect(ctx, GRect(0, solid_fill_y, bounds.size.w, bounds.size.h - solid_fill_y), 0, GCornerNone);
     }
   }
 
@@ -123,7 +120,7 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
     filled_bar_w = grid_w;
   }
   if (filled_bar_w > 0) {
-    graphics_context_set_fill_color(ctx, (game->boost_remaining_ms > 0) ? GColorOrange : GColorCobaltBlue);
+    graphics_context_set_fill_color(ctx, (game->current_boost_milli > 0) ? GColorOrange : GColorCobaltBlue);
     graphics_fill_rect(ctx, GRect(grid_x, bar_top_y, filled_bar_w, bar_top_h), 1, GCornersAll);
   }
 
@@ -227,11 +224,13 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
   game_state_get_pps(&pps_whole, &pps_frac);
 
   char pps_buf[48];
-  if (game->boost_remaining_ms > 0) {
-    snprintf(pps_buf, sizeof(pps_buf), "%lu.%02lu px/s [+%lu%%]",
+  if (game->current_boost_milli > 0) {
+    uint32_t boost_whole = 0, boost_tenths = 0;
+    game_state_get_current_boost_parts(&boost_whole, &boost_tenths);
+    snprintf(pps_buf, sizeof(pps_buf), "%lu.%02lu px/s [+%lu.%1lu%%]",
              (unsigned long)pps_whole, (unsigned long)pps_frac,
-             (unsigned long)game_state_get_boost_percent());
-    GRect badge_rect = GRect((bounds.size.w - 130) / 2, footer_y, 130, 14);
+             (unsigned long)boost_whole, (unsigned long)boost_tenths);
+    GRect badge_rect = GRect((bounds.size.w - 140) / 2, footer_y, 140, 14);
     graphics_context_set_fill_color(ctx, GColorOrange);
     graphics_fill_rect(ctx, badge_rect, 2, GCornersAll);
     graphics_context_set_text_color(ctx, GColorBlack);
@@ -403,12 +402,21 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
 
     graphics_context_set_text_color(ctx, GColorLightGray);
     if (game_state_is_transition_anim_done()) {
-      graphics_draw_text(ctx, "[Press Any Button]",
-                         fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                         GRect(modal_x, mini_grid_y + mini_grid_w + 19, modal_w, 16),
-                         GTextOverflowModeWordWrap,
-                         GTextAlignmentCenter,
-                         NULL);
+      if (game_state_get_transition_dismiss_clicks() == 0) {
+        graphics_draw_text(ctx, "[Press to wake]",
+                           fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                           GRect(modal_x, mini_grid_y + mini_grid_w + 19, modal_w, 16),
+                           GTextOverflowModeWordWrap,
+                           GTextAlignmentCenter,
+                           NULL);
+      } else {
+        graphics_draw_text(ctx, "[Press to dismiss]",
+                           fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                           GRect(modal_x, mini_grid_y + mini_grid_w + 19, modal_w, 16),
+                           GTextOverflowModeWordWrap,
+                           GTextAlignmentCenter,
+                           NULL);
+      }
     } else {
       graphics_draw_text(ctx, "Fusing into Tier 2...",
                          fonts_get_system_font(FONT_KEY_GOTHIC_14),

@@ -37,7 +37,7 @@ static void prv_header_update_proc(Layer *layer, GContext *ctx) {
 }
 
 static uint16_t prv_menu_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
-  return 4;
+  return 6;
 }
 
 static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -56,25 +56,44 @@ static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
       break;
     }
     case 1: {
-      uint32_t boost_pct = game_state_get_boost_percent();
-      uint32_t cost = game_state_get_boost_power_cost();
+      uint32_t boost_amt = game_state_get_boost_amount_percent();
+      uint32_t cost = game_state_get_boost_amount_cost();
       snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (+%lu%%) | Cost: %lu¢",
-               game->data.upgrade_boost_power_lvl, (unsigned long)boost_pct,
+               game->data.upgrade_boost_amount_lvl, (unsigned long)boost_amt,
                (unsigned long)cost);
-      menu_cell_basic_draw(ctx, cell_layer, "Boost Power", sub_buf, NULL);
+      menu_cell_basic_draw(ctx, cell_layer, "Boost Amount", sub_buf, NULL);
       break;
     }
     case 2: {
-      uint32_t len_ms = game_state_get_boost_duration_ms();
-      uint32_t cost = game_state_get_boost_len_cost();
-      snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (%lu.%lus) | Cost: %lu¢",
-               game->data.upgrade_boost_len_lvl,
-               (unsigned long)(len_ms / 1000), (unsigned long)((len_ms % 1000) / 100),
+      uint32_t accel = game_state_get_boost_accel_percent_per_sec();
+      uint32_t cost = game_state_get_boost_accel_cost();
+      snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (+%lu%%/s) | Cost: %lu¢",
+               game->data.upgrade_boost_accel_lvl, (unsigned long)accel,
                (unsigned long)cost);
-      menu_cell_basic_draw(ctx, cell_layer, "Boost Length", sub_buf, NULL);
+      menu_cell_basic_draw(ctx, cell_layer, "Boost Acceleration", sub_buf, NULL);
       break;
     }
     case 3: {
+      uint32_t sustain_ms = game_state_get_boost_sustain_ms();
+      uint32_t cost = game_state_get_boost_sustain_cost();
+      snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (%lu.%lus) | Cost: %lu¢",
+               game->data.upgrade_boost_sustain_lvl,
+               (unsigned long)(sustain_ms / 1000), (unsigned long)((sustain_ms % 1000) / 100),
+               (unsigned long)cost);
+      menu_cell_basic_draw(ctx, cell_layer, "Boost Sustain", sub_buf, NULL);
+      break;
+    }
+    case 4: {
+      uint32_t decay_tenths = game_state_get_boost_diminish_tenths_per_sec();
+      uint32_t cost = game_state_get_boost_diminish_cost();
+      snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (-%lu.%lu%%/s) | Cost: %lu¢",
+               game->data.upgrade_boost_diminish_lvl,
+               (unsigned long)(decay_tenths / 10), (unsigned long)(decay_tenths % 10),
+               (unsigned long)cost);
+      menu_cell_basic_draw(ctx, cell_layer, "Boost Diminish Rate", sub_buf, NULL);
+      break;
+    }
+    case 5: {
       uint32_t cost = game_state_get_offline_cap_cost();
       if (!game_state_is_offline_unlocked()) {
         snprintf(sub_buf, sizeof(sub_buf), "Unlock 15m | Cost: %lu¢", (unsigned long)cost);
@@ -102,12 +121,18 @@ static void prv_menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_inde
       bought = game_state_buy_fill_speed();
       break;
     case 1:
-      bought = game_state_buy_boost_power();
+      bought = game_state_buy_boost_amount();
       break;
     case 2:
-      bought = game_state_buy_boost_len();
+      bought = game_state_buy_boost_accel();
       break;
     case 3:
+      bought = game_state_buy_boost_sustain();
+      break;
+    case 4:
+      bought = game_state_buy_boost_diminish();
+      break;
+    case 5:
       bought = game_state_buy_offline_cap();
       break;
     default:

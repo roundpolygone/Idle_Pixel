@@ -42,10 +42,13 @@ In **Idle_Pixel**, the core objective is to progressively fill an 8x8 display ca
 - Completing a full 8x8 solid color grid fills 1/64th of the vertical gauge with that solid color.
 
 ### 3. Tier 2: The 64-Color Grid & Fuse-and-Shrink Celebration
-- **Fusing Animation**: When the 64th pixel of a solid grid completes, all individual cell borders dissolve and the entire 8x8 canvas fuses into **one monolithic, glowing solid block** of that color.
+- **Single Vibration**: When the 64th pixel of a solid grid completes, the watch vibrates once with haptic feedback to signal the achievement.
+- **Fusing Animation**: When the grid completes, all individual cell borders dissolve and the entire 8x8 canvas fuses into **one monolithic, glowing solid block** of that color.
 - **Shrinking Down**: The Tier 2 palette appears, and the solid block smoothly shrinks down and glides into its exact target slot on the Tier 2 grid, locking in with an impact pulse.
 - **Persistent Preview**: The preview modal does **not** auto-dismiss. It stays on screen indefinitely so you never miss seeing your completed color palette and progression!
-- **Protected Dismissal**: To prevent accidental skipping, the preview can only be dismissed by pressing any button (`UP`, `SELECT`, or `DOWN`) **after the shrink animation has finished**, at which point Tier 1 begins filling the next color.
+- **Protected Two-Step Dismissal**: Once the shrink animation has finished, dismissing the preview requires **two button presses**:
+  1. **First Press**: Illuminates the Pebble watch backlight (`[Press to wake]`).
+  2. **Second Press**: Confirms dismissal (`[Press to dismiss]`), starting Tier 1 on the next solid color.
 
 ### 4. Gold Pixels (Milestone Currency)
 - Completing all 64 solid color grids fills the Tier 2 grid completely ($64 \times 64 = 4,096$ pixels).
@@ -53,12 +56,12 @@ In **Idle_Pixel**, the core objective is to progressively fill an 8x8 display ca
 - Gold Pixels are **permanent prestige points** that persist across normal prestiges and will unlock special high-tier upgrades.
 - After earning a Gold Pixel, Tier 2 resets to 0 and the cycle begins anew.
 
-### 5. Dynamic Auto-Contrasting Background
+### 5. Dynamic Auto-Contrasting Background & Liquid Ink Boost Animation
 - If no custom background color is chosen, the game defaults to **Auto Contrast (`BG_COLOR_AUTO`)**.
 - The game continuously assesses the luminance of the actively filling color:
   - **Dark Filling Color** (e.g., Black, Navy, Forest Green, Dark Violet) $\rightarrow$ The background, panel, and empty cell interiors automatically switch to **White**.
   - **Light Filling Color** (e.g., White, Yellow, Cyan, Mint) $\rightarrow$ The background, panel, and empty cell interiors automatically switch to **Black**.
-- This guarantees maximum visual contrast so the liquid wipe animation is always crisp and visible.
+- **Liquid Ink Boost Animation**: Activating boost causes ink to rise up the background like liquid. The ink color dynamically calculates the exact midpoint hue between the filling color and the background color, creating a rolling wave effect that sloshes and rises in proportion to current filling momentum.
 
 ---
 
@@ -68,8 +71,8 @@ In **Idle_Pixel**, the core objective is to progressively fill an 8x8 display ca
 | :--- | :--- | :--- |
 | **`UP`** | **Clock Shortcut** | Jump directly to the built-in clock face. |
 | **`SELECT`** | **Main Menu** | Open the menu (Prestige, Store, Unlocks, Options, Clock). |
-| **`DOWN`** | **Boost** | Accelerate fill rate by +20% (upgradeable) for 1.0s (upgradeable). |
-| **`ANY`** | **Skip Modal** | Pressing any button dismisses the Tier 2 celebration popup. |
+| **`DOWN`** | **Boost Momentum** | Adds filling momentum. Pressing DOWN compounds momentum starting from the current boost state. |
+| **`ANY`** | **Fill Modal 2-Step** | 1st press illuminates backlight; 2nd press dismisses modal. |
 
 ---
 
@@ -81,11 +84,13 @@ In **Idle_Pixel**, the core objective is to progressively fill an 8x8 display ca
 - **Preserved**: Currency, purchased store upgrades, unlocked cosmetics, and **Gold Pixels** are completely preserved.
 
 ### 🛒 Store (Currency Upgrades)
-Currency earned from prestiging can be spent on four core upgrades with exponential cost scaling:
-1. **Fill Speed**: Multiplicative speed curve ($5000\text{ms} / (1 + 0.10 \times \text{lvl})$).
-2. **Boost Power**: Increases boost bonus (+20% per level).
-3. **Boost Duration**: Extends boost length (+250ms per level).
-4. **Offline Cap**: Increases maximum idle catch-up time (+15 minutes per level, doubling cost).
+Currency earned from prestiging can be spent on six core upgrades with exponential cost scaling:
+1. **Auto-Fill Speed**: Multiplicative baseline speed curve ($5000\text{ms} / (1 + 0.10 \times \text{lvl})$).
+2. **Boost Amount**: Base +20% fill speed gain (+5% per level).
+3. **Boost Acceleration**: How fast momentum climbs to the target peak (Base 20%/s, +10%/s per level).
+4. **Boost Sustain Duration**: How long peak boost holds before decaying (Base 0.0s, +500ms per level).
+5. **Boost Diminishing Rate**: How slowly momentum decays after peak (Base -10.0%/s, decays slower with higher level: $1000 / (10 + 2 \times \text{lvl})$).
+6. **Max Idle Time**: Increases maximum offline idle catch-up time (+15 minutes per level, doubling cost).
 
 ### 🎨 Unlocks (Cosmetics & Customization)
 Reaching new all-time solid grid milestones grants **Unlock Points**, which can be freely spent to unlock customizations:

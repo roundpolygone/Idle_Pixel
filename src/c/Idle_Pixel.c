@@ -25,12 +25,25 @@ static void prv_timer_callback(void *data) {
   s_tick_timer = app_timer_register(tick_interval, prv_timer_callback, NULL);
 }
 
-static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
-  if (game_state_is_transition_active()) {
-    if (game_state_is_transition_anim_done()) {
+static bool prv_handle_transition_click(void) {
+  if (!game_state_is_transition_active()) {
+    return false;
+  }
+  if (game_state_is_transition_anim_done()) {
+    if (game_state_get_transition_dismiss_clicks() == 0) {
+      light_enable_interaction();
+      game_state_register_transition_click();
+      ui_grid_mark_dirty();
+    } else {
       game_state_dismiss_transition();
       ui_grid_mark_dirty();
     }
+  }
+  return true;
+}
+
+static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (prv_handle_transition_click()) {
     return;
   }
   // Shortcut to clock page
@@ -38,22 +51,14 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
-  if (game_state_is_transition_active()) {
-    if (game_state_is_transition_anim_done()) {
-      game_state_dismiss_transition();
-      ui_grid_mark_dirty();
-    }
+  if (prv_handle_transition_click()) {
     return;
   }
   ui_menu_show();
 }
 
 static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context) {
-  if (game_state_is_transition_active()) {
-    if (game_state_is_transition_anim_done()) {
-      game_state_dismiss_transition();
-      ui_grid_mark_dirty();
-    }
+  if (prv_handle_transition_click()) {
     return;
   }
   game_state_activate_boost();
