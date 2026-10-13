@@ -28,7 +28,16 @@ static MenuLayer *s_clock_style_menu_layer = NULL;
 // =============================================================
 static void prv_color_preview_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
-  GColor color = game_state_get_pixel_color(s_preview_color_idx);
+  GColor color;
+  char buf[36];
+
+  if (s_preview_color_idx == BG_COLOR_AUTO) {
+    color = game_state_get_bg_color();
+    snprintf(buf, sizeof(buf), "Preview: Auto Contrast");
+  } else {
+    color = game_state_get_pixel_color(s_preview_color_idx);
+    snprintf(buf, sizeof(buf), "Preview: Color #%d", s_preview_color_idx);
+  }
 
   // Draw active preview background in real-time
   graphics_context_set_fill_color(ctx, color);
@@ -37,8 +46,6 @@ static void prv_color_preview_update_proc(Layer *layer, GContext *ctx) {
   bool is_dark = game_state_is_color_dark(color);
   graphics_context_set_text_color(ctx, is_dark ? GColorWhite : GColorBlack);
 
-  char buf[36];
-  snprintf(buf, sizeof(buf), "Preview: Color #%d", s_preview_color_idx);
   graphics_draw_text(ctx, buf,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      GRect(4, 4, bounds.size.w - 8, 22),
@@ -53,7 +60,7 @@ static void prv_color_preview_update_proc(Layer *layer, GContext *ctx) {
 static uint16_t prv_color_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_bg_colors < UNLOCK_BG_COLORS_COUNT);
-  return (can_buy ? 1 : 0) + game->data.unlocked_bg_colors;
+  return (can_buy ? 1 : 0) + 1 + game->data.unlocked_bg_colors;
 }
 
 static void prv_color_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -75,7 +82,42 @@ static void prv_color_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex
     return;
   }
 
-  uint8_t color_idx = (uint8_t)(cell_index->row - (can_buy ? 1 : 0));
+  int buy_offset = can_buy ? 1 : 0;
+  if (cell_index->row == buy_offset) {
+    // Auto Contrast row
+    char title[32];
+    if (game->data.selected_bg_color_index == BG_COLOR_AUTO) {
+      snprintf(title, sizeof(title), "Auto Contrast [Active]");
+    } else {
+      snprintf(title, sizeof(title), "Auto Contrast [Default]");
+    }
+
+    graphics_context_set_text_color(ctx, text_color);
+    graphics_draw_text(ctx, title,
+                       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                       GRect(8, 4, bounds.size.w - 48, 24),
+                       GTextOverflowModeWordWrap,
+                       GTextAlignmentLeft,
+                       NULL);
+
+    int swatch_size = 22;
+    int swatch_x = bounds.size.w - swatch_size - 10;
+    int swatch_y = (bounds.size.h - swatch_size) / 2;
+    GRect swatch_rect = GRect(swatch_x, swatch_y, swatch_size, swatch_size);
+
+    GRect swatch_left = GRect(swatch_x, swatch_y, swatch_size / 2, swatch_size);
+    GRect swatch_right = GRect(swatch_x + swatch_size / 2, swatch_y, swatch_size - swatch_size / 2, swatch_size);
+    graphics_context_set_fill_color(ctx, GColorBlack);
+    graphics_fill_rect(ctx, swatch_left, 0, GCornerNone);
+    graphics_context_set_fill_color(ctx, GColorWhite);
+    graphics_fill_rect(ctx, swatch_right, 0, GCornerNone);
+
+    graphics_context_set_stroke_color(ctx, is_highlighted ? GColorWhite : GColorBlack);
+    graphics_draw_rect(ctx, swatch_rect);
+    return;
+  }
+
+  uint8_t color_idx = (uint8_t)(cell_index->row - buy_offset - 1);
   char title[32];
   if (color_idx == game->data.selected_bg_color_index) {
     snprintf(title, sizeof(title), "Color #%d [Active]", color_idx);
@@ -106,11 +148,14 @@ static void prv_color_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex
 static void prv_color_selection_changed(MenuLayer *menu_layer, MenuIndex new_index, MenuIndex old_index, void *context) {
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_bg_colors < UNLOCK_BG_COLORS_COUNT);
+  int buy_offset = can_buy ? 1 : 0;
 
   if (can_buy && new_index.row == 0) {
     s_preview_color_idx = game->data.unlocked_bg_colors;
+  } else if (new_index.row == buy_offset) {
+    s_preview_color_idx = BG_COLOR_AUTO;
   } else {
-    s_preview_color_idx = (uint8_t)(new_index.row - (can_buy ? 1 : 0));
+    s_preview_color_idx = (uint8_t)(new_index.row - buy_offset - 1);
   }
 
   if (s_color_preview_layer) {
@@ -121,6 +166,7 @@ static void prv_color_selection_changed(MenuLayer *menu_layer, MenuIndex new_ind
 static void prv_color_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_bg_colors < UNLOCK_BG_COLORS_COUNT);
+  int buy_offset = can_buy ? 1 : 0;
 
   if (can_buy && cell_index->row == 0) {
     if (game_state_buy_next_bg_color()) {
@@ -131,9 +177,15 @@ static void prv_color_select_callback(MenuLayer *menu_layer, MenuIndex *cell_ind
     return;
   }
 
-  uint8_t color_idx = (uint8_t)(cell_index->row - (can_buy ? 1 : 0));
-  game->data.selected_bg_color_index = color_idx;
-  s_preview_color_idx = color_idx;
+  if (cell_index->row == buy_offset) {
+    game->data.selected_bg_color_index = BG_COLOR_AUTO;
+    s_preview_color_idx = BG_COLOR_AUTO;
+  } else {
+    uint8_t color_idx = (uint8_t)(cell_index->row - buy_offset - 1);
+    game->data.selected_bg_color_index = color_idx;
+    s_preview_color_idx = color_idx;
+  }
+
   game_state_save();
 
   if (game->data.option_vibration) {
@@ -167,6 +219,15 @@ static void prv_color_window_load(Window *window) {
 
   menu_layer_set_click_config_onto_window(s_color_menu_layer, window);
   layer_add_child(window_layer, menu_layer_get_layer(s_color_menu_layer));
+
+  bool can_buy = (game->data.unlocked_bg_colors < UNLOCK_BG_COLORS_COUNT);
+  uint16_t initial_row = 0;
+  if (game->data.selected_bg_color_index == BG_COLOR_AUTO) {
+    initial_row = can_buy ? 1 : 0;
+  } else {
+    initial_row = (can_buy ? 1 : 0) + 1 + game->data.selected_bg_color_index;
+  }
+  menu_layer_set_selected_index(s_color_menu_layer, (MenuIndex){ .section = 0, .row = initial_row }, MenuRowAlignCenter, false);
 }
 
 static void prv_color_window_unload(Window *window) {

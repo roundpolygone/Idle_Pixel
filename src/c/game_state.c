@@ -198,7 +198,7 @@ void game_state_init(void) {
     s_game.data.upgrade_boost_len_lvl = 0;    // Level 0: 1.0s, +20% boost
     s_game.data.upgrade_offline_cap_lvl = 0;  // 0 = no idle at start
     s_game.data.unlocked_bg_colors = 1;       // Color 0 unlocked
-    s_game.data.selected_bg_color_index = 0;
+    s_game.data.selected_bg_color_index = BG_COLOR_AUTO; // Default auto-contrasting background
     s_game.data.unlocked_fill_orders = 1;     // Normal order unlocked
     s_game.data.selected_fill_order = FILL_ORDER_NORMAL;
     s_game.data.unlocked_fonts = 1;           // Gothic unlocked
@@ -248,6 +248,10 @@ void game_state_init(void) {
         s_game.offline_summary.fills_gained = solid_grids_gained;
       }
     }
+
+    if (s_game.data.selected_bg_color_index == 0 && s_game.data.unlocked_bg_colors <= 1) {
+      s_game.data.selected_bg_color_index = BG_COLOR_AUTO;
+    }
   }
 
   s_game.boost_remaining_ms = 0;
@@ -281,7 +285,7 @@ void game_state_hard_reset(void) {
   s_game.data.upgrade_boost_len_lvl = 0;
   s_game.data.upgrade_offline_cap_lvl = 0;
   s_game.data.unlocked_bg_colors = 1;
-  s_game.data.selected_bg_color_index = 0;
+  s_game.data.selected_bg_color_index = BG_COLOR_AUTO;
   s_game.data.unlocked_fill_orders = 1;
   s_game.data.selected_fill_order = FILL_ORDER_NORMAL;
   s_game.data.unlocked_fonts = 1;
@@ -526,6 +530,14 @@ GColor game_state_get_pixel_color(uint8_t index) {
 }
 
 GColor game_state_get_bg_color(void) {
+  if (s_game.data.selected_bg_color_index == BG_COLOR_AUTO) {
+    GColor fill_col = game_state_get_active_solid_color();
+    if (game_state_is_color_dark(fill_col)) {
+      return GColorWhite;
+    } else {
+      return GColorBlack;
+    }
+  }
   return game_state_get_pixel_color(s_game.data.selected_bg_color_index);
 }
 

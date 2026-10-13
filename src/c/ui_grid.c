@@ -14,7 +14,10 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
 
   bool is_dark = game_state_is_color_dark(bg_color);
   GColor fg_color = is_dark ? GColorWhite : GColorBlack;
-  GColor panel_bg = GColorBlack;
+  GColor panel_bg = is_dark ? GColorBlack : GColorWhite;
+  GColor empty_cell_bg = is_dark ? GColorBlack : GColorWhite;
+  GColor empty_cell_stroke = is_dark ? GColorDarkGray : GColorLightGray;
+  GColor active_cell_stroke = is_dark ? GColorWhite : GColorBlack;
 
   // 2. Sizing & Layout calculations
   int cell_size = 13;
@@ -78,7 +81,7 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
         continue;
       }
 
-      GColor spark_col = ((i + phase) % 2 == 0) ? GColorWhite : GColorYellow;
+      GColor spark_col = ((i + phase) % 2 == 0) ? (is_dark ? GColorWhite : GColorCobaltBlue) : (is_dark ? GColorYellow : GColorOrange);
       graphics_context_set_stroke_color(ctx, spark_col);
 
       graphics_draw_pixel(ctx, GPoint(sx, sy));
@@ -146,7 +149,7 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
       graphics_context_set_fill_color(ctx, slice_col);
       graphics_fill_rect(ctx, slice_rect, 0, GCornerNone);
     } else {
-      graphics_context_set_fill_color(ctx, GColorBlack);
+      graphics_context_set_fill_color(ctx, empty_cell_bg);
       graphics_fill_rect(ctx, slice_rect, 0, GCornerNone);
     }
   }
@@ -174,7 +177,7 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
         graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
       } else if (seq_idx == cur_pix) {
         // Active filling pixel: Wipe / Rise liquid animation from bottom
-        graphics_context_set_fill_color(ctx, GColorBlack);
+        graphics_context_set_fill_color(ctx, empty_cell_bg);
         graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
 
         int fill_h = (int)((game->data.progress_ms * (uint32_t)cell_size) / (base_int > 0 ? base_int : 1));
@@ -189,13 +192,13 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
         }
 
         // Active border
-        graphics_context_set_stroke_color(ctx, GColorWhite);
+        graphics_context_set_stroke_color(ctx, active_cell_stroke);
         graphics_draw_rect(ctx, cell_rect);
       } else {
         // Empty pixel
-        graphics_context_set_fill_color(ctx, GColorBlack);
+        graphics_context_set_fill_color(ctx, empty_cell_bg);
         graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
-        graphics_context_set_stroke_color(ctx, GColorDarkGray);
+        graphics_context_set_stroke_color(ctx, empty_cell_stroke);
         graphics_draw_rect(ctx, cell_rect);
       }
     }
