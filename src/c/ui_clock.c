@@ -115,8 +115,10 @@ static void prv_clock_update_proc(Layer *layer, GContext *ctx) {
 
   // Mini Idle Pixel stats at bottom
   char idle_buf[48];
-  snprintf(idle_buf, sizeof(idle_buf), "PIXEL %lu/64 | FILL %lu/64",
-           (unsigned long)game->data.current_pixels, (unsigned long)game->data.fills_count);
+  snprintf(idle_buf, sizeof(idle_buf), "PX %lu/64 | COL %u/64 | GP %lu",
+           (unsigned long)game->data.current_pixels,
+           (unsigned int)(game->data.current_color_idx + 1),
+           (unsigned long)game->data.gold_pixels);
   graphics_context_set_text_color(ctx, fg_color);
   graphics_draw_text(ctx, idle_buf,
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),

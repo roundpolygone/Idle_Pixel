@@ -25,15 +25,30 @@ static void prv_timer_callback(void *data) {
 }
 
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (game_state_is_transition_active()) {
+    game_state_dismiss_transition();
+    ui_grid_mark_dirty();
+    return;
+  }
   // Shortcut to clock page
   ui_clock_show();
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (game_state_is_transition_active()) {
+    game_state_dismiss_transition();
+    ui_grid_mark_dirty();
+    return;
+  }
   ui_menu_show();
 }
 
 static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (game_state_is_transition_active()) {
+    game_state_dismiss_transition();
+    ui_grid_mark_dirty();
+    return;
+  }
   game_state_activate_boost();
   ui_grid_mark_dirty();
 }

@@ -21,17 +21,17 @@ static void prv_content_update_proc(Layer *layer, GContext *ctx) {
                      NULL);
 
   // Info details
-  char info_buf[128];
-  uint32_t fills = game->data.fills_count;
+  char info_buf[140];
+  uint32_t solid_grids = game->data.solid_grids_count;
 
-  if (fills == 0) {
+  if (solid_grids == 0) {
     snprintf(info_buf, sizeof(info_buf),
-             "Fills: 0\nNeed >= 1 full fill (1¢) to prestige.\n\n[BACK to return]");
+             "Solid Grids: 0\nNeed >= 1 filled solid grid (1¢) to prestige.\n\n[BACK to return]");
     graphics_context_set_text_color(ctx, GColorLightGray);
   } else {
     snprintf(info_buf, sizeof(info_buf),
-             "Fills: %lu\nGain: %lu¢\n\nResets grid & fills to 0!\n\n[SELECT] Confirm\n[BACK] Cancel",
-             (unsigned long)fills, (unsigned long)fills);
+             "Solid Grids: %lu\nGain: %lu¢\n\nResets solid grids!\n(Keeps Gold Pixels)\n\n[SELECT] Confirm\n[BACK] Cancel",
+             (unsigned long)solid_grids, (unsigned long)solid_grids);
     graphics_context_set_text_color(ctx, GColorWhite);
   }
 

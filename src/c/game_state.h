@@ -10,7 +10,7 @@
 #define MIN_BASE_INTERVAL_MS 500      // 500ms safety floor
 #define TICK_INTERVAL_MS 100          // 10 Hz game loop
 
-#define SAVE_VERSION 4
+#define SAVE_VERSION 5
 #define PERSIST_KEY_GAME_DATA 100
 
 #define UNLOCK_BG_COLORS_COUNT 64
@@ -37,9 +37,13 @@ typedef struct {
 
 typedef struct __attribute__((__packed__)) {
   uint32_t version;
-  uint32_t current_pixels;       // 0 to 63
-  uint32_t fills_count;          // current run fills (resets on prestige)
-  uint32_t max_unlock_milestone; // highest fills achieved across runs
+  uint32_t current_pixels;       // 0 to 63 (pixels in active solid grid)
+  uint8_t  current_color_idx;    // 0 to 63 (active solid color filling Tier 1)
+  uint8_t  tier2_pixels;         // 0 to 63 (completed solid grids towards Tier 2 grid)
+  uint16_t reserved;             // alignment padding
+  uint32_t solid_grids_count;    // current run solid grids (resets on prestige, 1¢ each)
+  uint32_t gold_pixels;          // total gold pixel points earned
+  uint32_t max_unlock_milestone; // highest solid grids achieved across runs
   uint32_t progress_ms;          // 0 to interval - 1
   uint32_t currency;             // currency in cents
   uint16_t prestige_level;       // number of prestiges
@@ -78,11 +82,16 @@ typedef struct {
   uint32_t offline_pixels_gained;
   uint8_t random_grid_order[TOTAL_PIXELS]; // shuffled order for RANDOM fill mode
   OfflineSummary offline_summary;
+  uint32_t tier2_transition_timer_ms;      // countdown for Tier 2 celebration popup
+  bool gold_pixel_just_earned;             // flag for golden celebration banner
 } GameState;
 
 void game_state_init(void);
 void game_state_save(void);
 void game_state_hard_reset(void);
+bool game_state_is_transition_active(void);
+void game_state_dismiss_transition(void);
+GColor game_state_get_active_solid_color(void);
 void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_completed);
 void game_state_activate_boost(void);
 bool game_state_can_prestige(void);

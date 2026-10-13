@@ -147,13 +147,47 @@ void game_state_init(void) {
     int bytes_read = persist_read_data(PERSIST_KEY_GAME_DATA, &s_game.data, sizeof(GameSaveData));
     if (bytes_read == sizeof(GameSaveData) && s_game.data.version == SAVE_VERSION) {
       loaded = true;
+    } else if (bytes_read > 0) {
+      // Check for v4 migration
+      uint32_t old_version = 0;
+      persist_read_data(PERSIST_KEY_GAME_DATA, &old_version, sizeof(uint32_t));
+      if (old_version == 4) {
+        // Read old struct prefix
+        struct __attribute__((__packed__)) {
+          uint32_t version;
+          uint32_t current_pixels;
+          uint32_t fills_count;
+          uint32_t max_unlock_milestone;
+          uint32_t progress_ms;
+          uint32_t currency;
+          uint16_t prestige_level;
+          uint32_t unlock_points;
+        } v4_header;
+        if (persist_read_data(PERSIST_KEY_GAME_DATA, &v4_header, sizeof(v4_header)) >= (int)sizeof(v4_header)) {
+          s_game.data.current_pixels = v4_header.current_pixels % TOTAL_PIXELS;
+          s_game.data.solid_grids_count = v4_header.fills_count;
+          s_game.data.current_color_idx = (uint8_t)(v4_header.fills_count % 64);
+          s_game.data.tier2_pixels = (uint8_t)(v4_header.fills_count % 64);
+          s_game.data.gold_pixels = v4_header.fills_count / 64;
+          s_game.data.max_unlock_milestone = v4_header.max_unlock_milestone;
+          s_game.data.progress_ms = v4_header.progress_ms;
+          s_game.data.currency = v4_header.currency;
+          s_game.data.prestige_level = v4_header.prestige_level;
+          s_game.data.unlock_points = v4_header.unlock_points;
+          s_game.data.version = SAVE_VERSION;
+          loaded = true;
+        }
+      }
     }
   }
 
   if (!loaded) {
     s_game.data.version = SAVE_VERSION;
     s_game.data.current_pixels = 0;
-    s_game.data.fills_count = 0;
+    s_game.data.current_color_idx = 0;
+    s_game.data.tier2_pixels = 0;
+    s_game.data.solid_grids_count = 0;
+    s_game.data.gold_pixels = 0;
     s_game.data.max_unlock_milestone = 0;
     s_game.data.progress_ms = 0;
     s_game.data.currency = 0;
@@ -189,29 +223,36 @@ void game_state_init(void) {
       s_game.data.progress_ms = (uint32_t)(total_offline_ms % interval);
 
       uint32_t total_pixels = s_game.data.current_pixels + pixels_gained;
-      uint32_t fills_gained = total_pixels / TOTAL_PIXELS;
+      uint32_t solid_grids_gained = total_pixels / TOTAL_PIXELS;
       s_game.data.current_pixels = total_pixels % TOTAL_PIXELS;
-      s_game.data.fills_count += fills_gained;
+      s_game.data.solid_grids_count += solid_grids_gained;
 
-      for (uint32_t f = 0; f < fills_gained; f++) {
-        uint32_t current_fill_num = s_game.data.fills_count - fills_gained + 1 + f;
-        if (current_fill_num > s_game.data.max_unlock_milestone) {
-          s_game.data.max_unlock_milestone = current_fill_num;
+      for (uint32_t f = 0; f < solid_grids_gained; f++) {
+        uint32_t current_solid_num = s_game.data.solid_grids_count - solid_grids_gained + 1 + f;
+        if (current_solid_num > s_game.data.max_unlock_milestone) {
+          s_game.data.max_unlock_milestone = current_solid_num;
           s_game.data.unlock_points++;
         }
       }
+
+      uint32_t total_tier2 = s_game.data.tier2_pixels + solid_grids_gained;
+      s_game.data.gold_pixels += (total_tier2 / 64);
+      s_game.data.tier2_pixels = (uint8_t)(total_tier2 % 64);
+      s_game.data.current_color_idx = (uint8_t)((s_game.data.current_color_idx + solid_grids_gained) % 64);
 
       if (elapsed_sec > 180) {
         s_game.offline_summary.should_show = true;
         s_game.offline_summary.away_sec = (uint32_t)elapsed_sec;
         s_game.offline_summary.credited_sec = credited_sec;
         s_game.offline_summary.pixels_gained = pixels_gained;
-        s_game.offline_summary.fills_gained = fills_gained;
+        s_game.offline_summary.fills_gained = solid_grids_gained;
       }
     }
   }
 
   s_game.boost_remaining_ms = 0;
+  s_game.tier2_transition_timer_ms = 0;
+  s_game.gold_pixel_just_earned = false;
 }
 
 void game_state_save(void) {
@@ -226,7 +267,10 @@ void game_state_hard_reset(void) {
 
   s_game.data.version = SAVE_VERSION;
   s_game.data.current_pixels = 0;
-  s_game.data.fills_count = 0;
+  s_game.data.current_color_idx = 0;
+  s_game.data.tier2_pixels = 0;
+  s_game.data.solid_grids_count = 0;
+  s_game.data.gold_pixels = 0;
   s_game.data.max_unlock_milestone = 0;
   s_game.data.progress_ms = 0;
   s_game.data.currency = 0;
@@ -250,9 +294,24 @@ void game_state_hard_reset(void) {
   s_game.data.last_save_time = time(NULL);
 
   s_game.boost_remaining_ms = 0;
+  s_game.tier2_transition_timer_ms = 0;
+  s_game.gold_pixel_just_earned = false;
   s_game.offline_summary.should_show = false;
 
   game_state_save();
+}
+
+bool game_state_is_transition_active(void) {
+  return (s_game.tier2_transition_timer_ms > 0);
+}
+
+void game_state_dismiss_transition(void) {
+  s_game.tier2_transition_timer_ms = 0;
+  s_game.gold_pixel_just_earned = false;
+}
+
+GColor game_state_get_active_solid_color(void) {
+  return game_state_get_pixel_color(s_game.data.current_color_idx);
 }
 
 void game_state_activate_boost(void) {
@@ -265,6 +324,16 @@ void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_compl
   }
   if (out_fill_completed) {
     *out_fill_completed = false;
+  }
+
+  // Handle tier 2 celebration modal timer
+  if (s_game.tier2_transition_timer_ms > 0) {
+    if (s_game.tier2_transition_timer_ms > dt_ms) {
+      s_game.tier2_transition_timer_ms -= dt_ms;
+    } else {
+      s_game.tier2_transition_timer_ms = 0;
+      s_game.gold_pixel_just_earned = false;
+    }
   }
 
   uint32_t speed_num = 100;
@@ -288,13 +357,27 @@ void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_compl
     }
     if (s_game.data.current_pixels >= TOTAL_PIXELS) {
       s_game.data.current_pixels = 0;
-      s_game.data.fills_count++;
+      s_game.data.solid_grids_count++;
+      s_game.data.tier2_pixels++;
 
       // Award unlock point if reaching a new peak milestone
-      if (s_game.data.fills_count > s_game.data.max_unlock_milestone) {
-        s_game.data.max_unlock_milestone = s_game.data.fills_count;
+      if (s_game.data.solid_grids_count > s_game.data.max_unlock_milestone) {
+        s_game.data.max_unlock_milestone = s_game.data.solid_grids_count;
         s_game.data.unlock_points++;
       }
+
+      // Check if Tier 2 (64 colors) filled up
+      if (s_game.data.tier2_pixels >= 64) {
+        s_game.data.tier2_pixels = 0;
+        s_game.data.gold_pixels++;
+        s_game.gold_pixel_just_earned = true;
+      }
+
+      // Advance to next solid color
+      s_game.data.current_color_idx = (s_game.data.current_color_idx + 1) % 64;
+
+      // Trigger 1.2s celebration popup transition
+      s_game.tier2_transition_timer_ms = 1200;
 
       prv_shuffle_random_order();
       if (out_fill_completed) {
@@ -305,16 +388,20 @@ void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_compl
 }
 
 bool game_state_can_prestige(void) {
-  return (s_game.data.fills_count > 0);
+  return (s_game.data.solid_grids_count > 0);
 }
 
 uint32_t game_state_prestige(void) {
-  uint32_t earned = s_game.data.fills_count;
+  uint32_t earned = s_game.data.solid_grids_count;
   s_game.data.currency += earned;
   s_game.data.current_pixels = 0;
-  s_game.data.fills_count = 0; // resets in current run
+  s_game.data.current_color_idx = 0;
+  s_game.data.tier2_pixels = 0;
+  s_game.data.solid_grids_count = 0; // resets in current run
   s_game.data.progress_ms = 0;
   s_game.data.prestige_level++;
+  s_game.tier2_transition_timer_ms = 0;
+  s_game.gold_pixel_just_earned = false;
   prv_shuffle_random_order();
   game_state_save();
   return earned;
