@@ -80,6 +80,11 @@ typedef struct __attribute__((__packed__)) {
   time_t last_save_time;           // epoch seconds
 } GameSaveData;
 
+typedef enum {
+  VIEW_MODE_TIER1 = 0,
+  VIEW_MODE_TIER2 = 1,
+} GridViewMode;
+
 typedef struct {
   GameSaveData data;
   uint32_t current_boost_milli;            // current momentum in milli-percent (e.g. 20000 = 20.0%)
@@ -88,24 +93,30 @@ typedef struct {
   uint32_t offline_pixels_gained;
   uint8_t random_grid_order[TOTAL_PIXELS]; // shuffled order for RANDOM fill mode
   OfflineSummary offline_summary;
-  bool transition_active;                  // true while Tier 2 transition/preview is shown
+  GridViewMode view_mode;                  // active view: Tier 1 vs Tier 2
+  bool transition_active;                  // true while completion preview or animation is active
+  bool transition_anim_running;            // false = waiting for press to start anim, true = anim playing
   uint32_t transition_anim_ms;             // animation elapsed time
-  bool transition_anim_done;               // true once shrink-down animation completes
-  uint8_t transition_completed_color;      // color index that just fused & shrank
-  uint8_t transition_dismiss_clicks;       // 0 = needs 1st click to wake, 1 = ready to dismiss
+  uint8_t transition_completed_color;      // color index that completed
   bool gold_pixel_just_earned;             // flag for golden celebration banner
 } GameState;
 
 void game_state_init(void);
 void game_state_save(void);
 void game_state_hard_reset(void);
+
+// View mode controls
+GridViewMode game_state_get_view_mode(void);
+void game_state_set_view_mode(GridViewMode mode);
+
+// Transition controls
 bool game_state_is_transition_active(void);
-bool game_state_is_transition_anim_done(void);
-void game_state_dismiss_transition(void);
+bool game_state_is_transition_anim_running(void);
+void game_state_start_transition_anim(void);
+void game_state_finish_transition(void);
 uint32_t game_state_get_transition_anim_ms(void);
 uint8_t game_state_get_transition_completed_color(void);
-uint8_t game_state_get_transition_dismiss_clicks(void);
-void game_state_register_transition_click(void);
+
 GColor game_state_get_active_solid_color(void);
 GColor game_state_get_ink_color(void);
 void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_completed);

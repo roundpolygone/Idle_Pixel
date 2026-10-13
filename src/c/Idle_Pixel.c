@@ -2,7 +2,6 @@
 #include "game_state.h"
 #include "ui_grid.h"
 #include "ui_menu.h"
-#include "ui_clock.h"
 #include "ui_offline_summary.h"
 
 static Window *s_window;
@@ -29,15 +28,10 @@ static bool prv_handle_transition_click(void) {
   if (!game_state_is_transition_active()) {
     return false;
   }
-  if (game_state_is_transition_anim_done()) {
-    if (game_state_get_transition_dismiss_clicks() == 0) {
-      light_enable_interaction();
-      game_state_register_transition_click();
-      ui_grid_mark_dirty();
-    } else {
-      game_state_dismiss_transition();
-      ui_grid_mark_dirty();
-    }
+  if (!game_state_is_transition_anim_running()) {
+    light_enable_interaction();
+    game_state_start_transition_anim();
+    ui_grid_mark_dirty();
   }
   return true;
 }
@@ -46,8 +40,11 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (prv_handle_transition_click()) {
     return;
   }
-  // Shortcut to clock page
-  ui_clock_show();
+  // Up button zooms out to Tier 2 grid
+  if (game_state_get_view_mode() == VIEW_MODE_TIER1) {
+    game_state_set_view_mode(VIEW_MODE_TIER2);
+    ui_grid_mark_dirty();
+  }
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -61,11 +58,32 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context)
   if (prv_handle_transition_click()) {
     return;
   }
+  // On Tier 2 screen, down zooms into Tier 1 grid
+  if (game_state_get_view_mode() == VIEW_MODE_TIER2) {
+    game_state_set_view_mode(VIEW_MODE_TIER1);
+    ui_grid_mark_dirty();
+    return;
+  }
+  // On Tier 1 screen, down activates boost
   game_state_activate_boost();
   ui_grid_mark_dirty();
 }
 
+static void prv_back_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (prv_handle_transition_click()) {
+    return;
+  }
+  // On Tier 2 screen, back zooms into Tier 1 grid
+  if (game_state_get_view_mode() == VIEW_MODE_TIER2) {
+    game_state_set_view_mode(VIEW_MODE_TIER1);
+    ui_grid_mark_dirty();
+    return;
+  }
+  window_stack_pop(true);
+}
+
 static void prv_click_config_provider(void *context) {
+  window_single_click_subscribe(BUTTON_ID_BACK, prv_back_click_handler);
   window_single_click_subscribe(BUTTON_ID_UP, prv_up_click_handler);
   window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
   window_single_click_subscribe(BUTTON_ID_DOWN, prv_down_click_handler);

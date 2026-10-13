@@ -426,10 +426,10 @@ void game_state_init(void) {
   s_game.current_boost_milli = 0;
   s_game.target_boost_milli = 0;
   s_game.boost_sustain_remaining_ms = 0;
+  s_game.view_mode = VIEW_MODE_TIER1;
   s_game.transition_active = false;
+  s_game.transition_anim_running = false;
   s_game.transition_anim_ms = 0;
-  s_game.transition_anim_done = false;
-  s_game.transition_dismiss_clicks = 0;
   s_game.transition_completed_color = 0;
   s_game.gold_pixel_just_earned = false;
 }
@@ -478,10 +478,10 @@ void game_state_hard_reset(void) {
   s_game.current_boost_milli = 0;
   s_game.target_boost_milli = 0;
   s_game.boost_sustain_remaining_ms = 0;
+  s_game.view_mode = VIEW_MODE_TIER1;
   s_game.transition_active = false;
+  s_game.transition_anim_running = false;
   s_game.transition_anim_ms = 0;
-  s_game.transition_anim_done = false;
-  s_game.transition_dismiss_clicks = 0;
   s_game.transition_completed_color = 0;
   s_game.gold_pixel_just_earned = false;
   s_game.offline_summary.should_show = false;
@@ -489,20 +489,49 @@ void game_state_hard_reset(void) {
   game_state_save();
 }
 
+GridViewMode game_state_get_view_mode(void) {
+  return s_game.view_mode;
+}
+
+void game_state_set_view_mode(GridViewMode mode) {
+  s_game.view_mode = mode;
+}
+
 bool game_state_is_transition_active(void) {
   return s_game.transition_active;
 }
 
-bool game_state_is_transition_anim_done(void) {
-  return s_game.transition_anim_done;
+bool game_state_is_transition_anim_running(void) {
+  return s_game.transition_anim_running;
 }
 
-void game_state_dismiss_transition(void) {
-  s_game.transition_active = false;
+void game_state_start_transition_anim(void) {
+  s_game.transition_anim_running = true;
   s_game.transition_anim_ms = 0;
-  s_game.transition_anim_done = false;
-  s_game.transition_dismiss_clicks = 0;
-  s_game.gold_pixel_just_earned = false;
+}
+
+void game_state_finish_transition(void) {
+  s_game.data.current_pixels = 0;
+  s_game.data.solid_grids_count++;
+  s_game.data.tier2_pixels++;
+
+  if (s_game.data.solid_grids_count > s_game.data.max_unlock_milestone) {
+    s_game.data.max_unlock_milestone = s_game.data.solid_grids_count;
+    s_game.data.unlock_points++;
+  }
+
+  if (s_game.data.tier2_pixels >= 64) {
+    s_game.data.tier2_pixels = 0;
+    s_game.data.gold_pixels++;
+    s_game.gold_pixel_just_earned = true;
+  }
+
+  s_game.data.current_color_idx = (s_game.data.current_color_idx + 1) % 64;
+  s_game.transition_active = false;
+  s_game.transition_anim_running = false;
+  s_game.transition_anim_ms = 0;
+
+  prv_shuffle_random_order();
   game_state_save();
 }
 
@@ -512,14 +541,6 @@ uint32_t game_state_get_transition_anim_ms(void) {
 
 uint8_t game_state_get_transition_completed_color(void) {
   return s_game.transition_completed_color;
-}
-
-uint8_t game_state_get_transition_dismiss_clicks(void) {
-  return s_game.transition_dismiss_clicks;
-}
-
-void game_state_register_transition_click(void) {
-  s_game.transition_dismiss_clicks++;
 }
 
 GColor game_state_get_active_solid_color(void) {
@@ -580,16 +601,16 @@ void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_compl
     *out_fill_completed = false;
   }
 
-  // Handle Tier 2 celebration animation
+  // Handle Tier 2 completion preview and animation
   if (s_game.transition_active) {
-    s_game.transition_anim_ms += dt_ms;
-    if (s_game.transition_anim_ms >= 1500) {
-      if (!s_game.transition_anim_done) {
-        s_game.transition_anim_done = true;
-        // The fill screen vibrates only once on trigger, not again when animation finishes
-      }
+    if (!s_game.transition_anim_running) {
+      // Waiting for user button press to illuminate watch & start meld/shrink animation
+      return;
     }
-    // Progression is paused while modal is active
+    s_game.transition_anim_ms += dt_ms;
+    if (s_game.transition_anim_ms >= 1600) {
+      game_state_finish_transition();
+    }
     return;
   }
 
@@ -645,37 +666,17 @@ void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_compl
       *out_pixel_added = true;
     }
     if (s_game.data.current_pixels >= TOTAL_PIXELS) {
-      s_game.data.current_pixels = 0;
-      s_game.data.solid_grids_count++;
+      s_game.data.current_pixels = TOTAL_PIXELS; // Keep 64 so preview shows complete solid grid
       s_game.transition_completed_color = s_game.data.current_color_idx;
-      s_game.data.tier2_pixels++;
-
-      // Award unlock point if reaching a new peak milestone
-      if (s_game.data.solid_grids_count > s_game.data.max_unlock_milestone) {
-        s_game.data.max_unlock_milestone = s_game.data.solid_grids_count;
-        s_game.data.unlock_points++;
-      }
-
-      // Check if Tier 2 (64 colors) filled up
-      if (s_game.data.tier2_pixels >= 64) {
-        s_game.data.tier2_pixels = 0;
-        s_game.data.gold_pixels++;
-        s_game.gold_pixel_just_earned = true;
-      }
-
-      // Advance to next solid color
-      s_game.data.current_color_idx = (s_game.data.current_color_idx + 1) % 64;
-
-      // Start transition animation (fuses into solid block, shrinks down into Tier 2 slot)
       s_game.transition_active = true;
+      s_game.transition_anim_running = false;
       s_game.transition_anim_ms = 0;
-      s_game.transition_anim_done = false;
-      s_game.transition_dismiss_clicks = 0;
+      s_game.view_mode = VIEW_MODE_TIER1;
 
-      prv_shuffle_random_order();
       if (out_fill_completed) {
         *out_fill_completed = true;
       }
+      return;
     }
   }
 }
@@ -693,10 +694,10 @@ uint32_t game_state_prestige(void) {
   s_game.data.solid_grids_count = 0; // resets in current run
   s_game.data.progress_ms = 0;
   s_game.data.prestige_level++;
+  s_game.view_mode = VIEW_MODE_TIER1;
   s_game.transition_active = false;
+  s_game.transition_anim_running = false;
   s_game.transition_anim_ms = 0;
-  s_game.transition_anim_done = false;
-  s_game.transition_dismiss_clicks = 0;
   s_game.gold_pixel_just_earned = false;
   prv_shuffle_random_order();
   game_state_save();
