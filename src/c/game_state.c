@@ -47,8 +47,8 @@ uint32_t game_state_get_base_interval_ms(void) {
 }
 
 uint32_t game_state_get_boost_amount_percent(void) {
-  // Lvl 0 = 20%, +5% per lvl
-  return 20 + ((uint32_t)s_game.data.upgrade_boost_amount_lvl * 5);
+  // Lvl 0 = 5%, +5% per lvl
+  return 5 + ((uint32_t)s_game.data.upgrade_boost_amount_lvl * 5);
 }
 
 uint32_t game_state_get_boost_accel_percent_per_sec(void) {
@@ -64,6 +64,11 @@ uint32_t game_state_get_boost_sustain_ms(void) {
 uint32_t game_state_get_boost_diminish_tenths_per_sec(void) {
   // Lvl 0 = 10.0%/s, decays slower per lvl: 1000 / (10 + 2 * lvl)
   return 1000 / (10 + ((uint32_t)s_game.data.upgrade_boost_diminish_lvl * 2));
+}
+
+uint32_t game_state_get_boost_max_limit_percent(void) {
+  // Lvl 0 = 100%, +25% per lvl
+  return 100 + ((uint32_t)s_game.data.upgrade_boost_limit_lvl * 25);
 }
 
 uint32_t game_state_get_current_boost_percent(void) {
@@ -94,7 +99,8 @@ void game_state_get_pps(uint32_t *out_whole, uint32_t *out_hundredths) {
   uint32_t interval = game_state_get_base_interval_ms();
   if (interval == 0) interval = 1;
   uint64_t mult = 100000ULL + s_game.current_boost_milli;
-  uint64_t scaled_pps = (10000000ULL * mult) / ((uint64_t)interval * 100000ULL);
+  // True PPS in hundredths = (1000 * 100 * mult) / (interval * 100000) = mult / interval
+  uint64_t scaled_pps = mult / (uint64_t)interval;
   if (out_whole) {
     *out_whole = (uint32_t)(scaled_pps / 100);
   }
@@ -161,6 +167,10 @@ uint32_t game_state_get_boost_diminish_cost(void) {
   return game_state_calc_cost_1_5x(s_game.data.upgrade_boost_diminish_lvl);
 }
 
+uint32_t game_state_get_boost_limit_cost(void) {
+  return game_state_calc_cost_1_5x(s_game.data.upgrade_boost_limit_lvl);
+}
+
 uint32_t game_state_get_offline_cap_cost(void) {
   return game_state_calc_cost_2x(s_game.data.upgrade_offline_cap_lvl);
 }
@@ -177,7 +187,73 @@ void game_state_init(void) {
     } else if (bytes_read > 0) {
       uint32_t old_version = 0;
       persist_read_data(PERSIST_KEY_GAME_DATA, &old_version, sizeof(uint32_t));
-      if (old_version == 5) {
+      if (old_version == 6) {
+        struct __attribute__((__packed__)) {
+          uint32_t version;
+          uint32_t current_pixels;
+          uint8_t  current_color_idx;
+          uint8_t  tier2_pixels;
+          uint16_t reserved;
+          uint32_t solid_grids_count;
+          uint32_t gold_pixels;
+          uint32_t max_unlock_milestone;
+          uint32_t progress_ms;
+          uint32_t currency;
+          uint16_t prestige_level;
+          uint32_t unlock_points;
+          uint8_t  upgrade_fill_speed_lvl;
+          uint8_t  upgrade_boost_amount_lvl;
+          uint8_t  upgrade_boost_accel_lvl;
+          uint8_t  upgrade_boost_sustain_lvl;
+          uint8_t  upgrade_boost_diminish_lvl;
+          uint8_t  upgrade_offline_cap_lvl;
+          uint8_t  unlocked_bg_colors;
+          uint8_t  selected_bg_color_index;
+          uint8_t  unlocked_fill_orders;
+          uint8_t  selected_fill_order;
+          uint8_t  unlocked_fonts;
+          uint8_t  selected_font;
+          uint8_t  unlocked_clock_styles;
+          uint8_t  selected_clock_style;
+          bool     option_vibration;
+          bool     option_analog_clock;
+          bool     option_24h;
+          time_t   last_save_time;
+        } v6_save;
+        if (persist_read_data(PERSIST_KEY_GAME_DATA, &v6_save, sizeof(v6_save)) >= (int)sizeof(v6_save)) {
+          s_game.data.current_pixels = v6_save.current_pixels;
+          s_game.data.current_color_idx = v6_save.current_color_idx;
+          s_game.data.tier2_pixels = v6_save.tier2_pixels;
+          s_game.data.solid_grids_count = v6_save.solid_grids_count;
+          s_game.data.gold_pixels = v6_save.gold_pixels;
+          s_game.data.max_unlock_milestone = v6_save.max_unlock_milestone;
+          s_game.data.progress_ms = v6_save.progress_ms;
+          s_game.data.currency = v6_save.currency;
+          s_game.data.prestige_level = v6_save.prestige_level;
+          s_game.data.unlock_points = v6_save.unlock_points;
+          s_game.data.upgrade_fill_speed_lvl = v6_save.upgrade_fill_speed_lvl;
+          s_game.data.upgrade_boost_amount_lvl = v6_save.upgrade_boost_amount_lvl;
+          s_game.data.upgrade_boost_accel_lvl = v6_save.upgrade_boost_accel_lvl;
+          s_game.data.upgrade_boost_sustain_lvl = v6_save.upgrade_boost_sustain_lvl;
+          s_game.data.upgrade_boost_diminish_lvl = v6_save.upgrade_boost_diminish_lvl;
+          s_game.data.upgrade_boost_limit_lvl = 0;
+          s_game.data.upgrade_offline_cap_lvl = v6_save.upgrade_offline_cap_lvl;
+          s_game.data.unlocked_bg_colors = v6_save.unlocked_bg_colors;
+          s_game.data.selected_bg_color_index = v6_save.selected_bg_color_index;
+          s_game.data.unlocked_fill_orders = v6_save.unlocked_fill_orders;
+          s_game.data.selected_fill_order = v6_save.selected_fill_order;
+          s_game.data.unlocked_fonts = v6_save.unlocked_fonts;
+          s_game.data.selected_font = v6_save.selected_font;
+          s_game.data.unlocked_clock_styles = v6_save.unlocked_clock_styles;
+          s_game.data.selected_clock_style = v6_save.selected_clock_style;
+          s_game.data.option_vibration = v6_save.option_vibration;
+          s_game.data.option_analog_clock = v6_save.option_analog_clock;
+          s_game.data.option_24h = v6_save.option_24h;
+          s_game.data.last_save_time = v6_save.last_save_time;
+          s_game.data.version = SAVE_VERSION;
+          loaded = true;
+        }
+      } else if (old_version == 5) {
         struct __attribute__((__packed__)) {
           uint32_t version;
           uint32_t current_pixels;
@@ -224,6 +300,7 @@ void game_state_init(void) {
           s_game.data.upgrade_boost_accel_lvl = 0;
           s_game.data.upgrade_boost_sustain_lvl = v5_save.upgrade_boost_len_lvl;
           s_game.data.upgrade_boost_diminish_lvl = 0;
+          s_game.data.upgrade_boost_limit_lvl = 0;
           s_game.data.upgrade_offline_cap_lvl = v5_save.upgrade_offline_cap_lvl;
           s_game.data.unlocked_bg_colors = v5_save.unlocked_bg_colors;
           s_game.data.selected_bg_color_index = v5_save.selected_bg_color_index;
@@ -283,10 +360,11 @@ void game_state_init(void) {
     s_game.data.prestige_level = 0;
     s_game.data.unlock_points = 0;
     s_game.data.upgrade_fill_speed_lvl = 0;
-    s_game.data.upgrade_boost_amount_lvl = 0;   // Level 0: +20% gain
+    s_game.data.upgrade_boost_amount_lvl = 0;   // Level 0: +5% gain
     s_game.data.upgrade_boost_accel_lvl = 0;    // Level 0: 20%/s accel
     s_game.data.upgrade_boost_sustain_lvl = 0;  // Level 0: 0s sustain
     s_game.data.upgrade_boost_diminish_lvl = 0; // Level 0: 10%/s decay
+    s_game.data.upgrade_boost_limit_lvl = 0;    // Level 0: 100% max limit
     s_game.data.upgrade_offline_cap_lvl = 0;    // 0 = no idle at start
     s_game.data.unlocked_bg_colors = 1;         // Color 0 unlocked
     s_game.data.selected_bg_color_index = BG_COLOR_AUTO; // Default auto-contrasting background
@@ -382,6 +460,7 @@ void game_state_hard_reset(void) {
   s_game.data.upgrade_boost_accel_lvl = 0;
   s_game.data.upgrade_boost_sustain_lvl = 0;
   s_game.data.upgrade_boost_diminish_lvl = 0;
+  s_game.data.upgrade_boost_limit_lvl = 0;
   s_game.data.upgrade_offline_cap_lvl = 0;
   s_game.data.unlocked_bg_colors = 1;
   s_game.data.selected_bg_color_index = BG_COLOR_AUTO;
@@ -477,7 +556,19 @@ void game_state_activate_boost(void) {
   // Adds filling momentum to the fill power.
   // Compounds effect taking over the increase at current boost state.
   uint32_t amount_milli = game_state_get_boost_amount_percent() * 1000;
+  uint32_t max_milli = game_state_get_boost_max_limit_percent() * 1000;
+
+  if (s_game.current_boost_milli >= max_milli) {
+    s_game.current_boost_milli = max_milli;
+    s_game.target_boost_milli = max_milli;
+    s_game.boost_sustain_remaining_ms = game_state_get_boost_sustain_ms();
+    return;
+  }
+
   s_game.target_boost_milli = s_game.current_boost_milli + amount_milli;
+  if (s_game.target_boost_milli > max_milli) {
+    s_game.target_boost_milli = max_milli;
+  }
   s_game.boost_sustain_remaining_ms = 0;
 }
 
@@ -500,6 +591,14 @@ void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_compl
     }
     // Progression is paused while modal is active
     return;
+  }
+
+  uint32_t max_milli = game_state_get_boost_max_limit_percent() * 1000;
+  if (s_game.target_boost_milli > max_milli) {
+    s_game.target_boost_milli = max_milli;
+  }
+  if (s_game.current_boost_milli > max_milli) {
+    s_game.current_boost_milli = max_milli;
   }
 
   // Update boost momentum physics
@@ -656,6 +755,17 @@ bool game_state_buy_boost_diminish(void) {
   if (s_game.data.currency >= cost) {
     s_game.data.currency -= cost;
     s_game.data.upgrade_boost_diminish_lvl++;
+    game_state_save();
+    return true;
+  }
+  return false;
+}
+
+bool game_state_buy_boost_limit(void) {
+  uint32_t cost = game_state_get_boost_limit_cost();
+  if (s_game.data.currency >= cost) {
+    s_game.data.currency -= cost;
+    s_game.data.upgrade_boost_limit_lvl++;
     game_state_save();
     return true;
   }

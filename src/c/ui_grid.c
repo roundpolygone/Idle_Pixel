@@ -58,7 +58,10 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
     static uint16_t s_ink_wave_phase = 0;
     s_ink_wave_phase += 1400; // gentle undulating wave motion
 
-    int liquid_h = (int)(((int32_t)bounds.size.h * (int32_t)game->current_boost_milli) / 60000);
+    uint32_t max_limit_milli = game_state_get_boost_max_limit_percent() * 1000;
+    if (max_limit_milli == 0) max_limit_milli = 100000;
+
+    int liquid_h = (int)(((int32_t)bounds.size.h * (int32_t)game->current_boost_milli) / (int32_t)max_limit_milli);
     if (liquid_h > bounds.size.h) {
       liquid_h = bounds.size.h;
     }

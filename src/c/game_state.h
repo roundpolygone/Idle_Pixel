@@ -10,7 +10,7 @@
 #define MIN_BASE_INTERVAL_MS 500      // 500ms safety floor
 #define TICK_INTERVAL_MS 100          // 10 Hz game loop
 
-#define SAVE_VERSION 6
+#define SAVE_VERSION 7
 #define PERSIST_KEY_GAME_DATA 100
 
 #define UNLOCK_BG_COLORS_COUNT 64
@@ -52,10 +52,11 @@ typedef struct __attribute__((__packed__)) {
 
   // Store Upgrades
   uint8_t upgrade_fill_speed_lvl;    // multiplicative curve (5000 / (1 + 0.10 * lvl))
-  uint8_t upgrade_boost_amount_lvl;  // lvl 0 = +20% gain (+5% per lvl)
+  uint8_t upgrade_boost_amount_lvl;  // lvl 0 = +5% gain (+5% per lvl)
   uint8_t upgrade_boost_accel_lvl;   // lvl 0 = 20%/s (+10%/s per lvl)
   uint8_t upgrade_boost_sustain_lvl; // lvl 0 = 0.0s (+500ms per lvl)
   uint8_t upgrade_boost_diminish_lvl;// lvl 0 = 10.0%/s (slower decay per lvl)
+  uint8_t upgrade_boost_limit_lvl;   // lvl 0 = 100% max limit (+25% per lvl)
   uint8_t upgrade_offline_cap_lvl;   // lvl 0 = 0m (locked), lvl 1 = 15m (+15m per lvl)
 
   // Unlocks & Selections
@@ -118,6 +119,7 @@ uint32_t game_state_get_boost_amount_percent(void);
 uint32_t game_state_get_boost_accel_percent_per_sec(void);
 uint32_t game_state_get_boost_sustain_ms(void);
 uint32_t game_state_get_boost_diminish_tenths_per_sec(void);
+uint32_t game_state_get_boost_max_limit_percent(void);
 uint32_t game_state_get_current_boost_percent(void);
 void game_state_get_current_boost_parts(uint32_t *out_whole, uint32_t *out_tenths);
 uint32_t game_state_get_max_offline_sec(void);
@@ -138,6 +140,7 @@ uint32_t game_state_get_boost_amount_cost(void);
 uint32_t game_state_get_boost_accel_cost(void);
 uint32_t game_state_get_boost_sustain_cost(void);
 uint32_t game_state_get_boost_diminish_cost(void);
+uint32_t game_state_get_boost_limit_cost(void);
 uint32_t game_state_get_offline_cap_cost(void);
 
 // Store actions
@@ -146,6 +149,7 @@ bool game_state_buy_boost_amount(void);
 bool game_state_buy_boost_accel(void);
 bool game_state_buy_boost_sustain(void);
 bool game_state_buy_boost_diminish(void);
+bool game_state_buy_boost_limit(void);
 bool game_state_buy_offline_cap(void);
 
 // Unlock currency spending actions

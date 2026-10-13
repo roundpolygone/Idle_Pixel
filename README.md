@@ -62,6 +62,7 @@ In **Idle_Pixel**, the core objective is to progressively fill an 8x8 display ca
   - **Dark Filling Color** (e.g., Black, Navy, Forest Green, Dark Violet) $\rightarrow$ The background, panel, and empty cell interiors automatically switch to **White**.
   - **Light Filling Color** (e.g., White, Yellow, Cyan, Mint) $\rightarrow$ The background, panel, and empty cell interiors automatically switch to **Black**.
 - **Liquid Ink Boost Animation**: Activating boost causes ink to rise up the background like liquid. The ink color dynamically calculates the exact midpoint hue between the filling color and the background color, creating a rolling wave effect that sloshes and rises in proportion to current filling momentum.
+- **Max Fill Limit**: The ink fill height is capped at the top of the screen, which represents the current **Boost Max Limit** (initially 100%, expandable in the Store).
 
 ---
 
@@ -71,7 +72,7 @@ In **Idle_Pixel**, the core objective is to progressively fill an 8x8 display ca
 | :--- | :--- | :--- |
 | **`UP`** | **Clock Shortcut** | Jump directly to the built-in clock face. |
 | **`SELECT`** | **Main Menu** | Open the menu (Prestige, Store, Unlocks, Options, Clock). |
-| **`DOWN`** | **Boost Momentum** | Adds filling momentum. Pressing DOWN compounds momentum starting from the current boost state. |
+| **`DOWN`** | **Boost Momentum** | Adds filling momentum (+5% per press, compounds up to max fill limit). |
 | **`ANY`** | **Fill Modal 2-Step** | 1st press illuminates backlight; 2nd press dismisses modal. |
 
 ---
@@ -84,13 +85,14 @@ In **Idle_Pixel**, the core objective is to progressively fill an 8x8 display ca
 - **Preserved**: Currency, purchased store upgrades, unlocked cosmetics, and **Gold Pixels** are completely preserved.
 
 ### 🛒 Store (Currency Upgrades)
-Currency earned from prestiging can be spent on six core upgrades with exponential cost scaling:
+Currency earned from prestiging can be spent on seven core upgrades with exponential cost scaling:
 1. **Auto-Fill Speed**: Multiplicative baseline speed curve ($5000\text{ms} / (1 + 0.10 \times \text{lvl})$).
-2. **Boost Amount**: Base +20% fill speed gain (+5% per level).
+2. **Boost Amount**: Base +5% fill speed gain (+5% per level), stacked via repeated presses.
 3. **Boost Acceleration**: How fast momentum climbs to the target peak (Base 20%/s, +10%/s per level).
 4. **Boost Sustain Duration**: How long peak boost holds before decaying (Base 0.0s, +500ms per level).
 5. **Boost Diminishing Rate**: How slowly momentum decays after peak (Base -10.0%/s, decays slower with higher level: $1000 / (10 + 2 \times \text{lvl})$).
-6. **Max Idle Time**: Increases maximum offline idle catch-up time (+15 minutes per level, doubling cost).
+6. **Boost Max Limit**: Maximum momentum capacity / top-of-screen limit (Base 100%, +25% per level).
+7. **Max Idle Time**: Increases maximum offline idle catch-up time (+15 minutes per level, doubling cost).
 
 ### 🎨 Unlocks (Cosmetics & Customization)
 Reaching new all-time solid grid milestones grants **Unlock Points**, which can be freely spent to unlock customizations:

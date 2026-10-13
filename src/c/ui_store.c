@@ -37,7 +37,7 @@ static void prv_header_update_proc(Layer *layer, GContext *ctx) {
 }
 
 static uint16_t prv_menu_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
-  return 6;
+  return 7;
 }
 
 static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -94,6 +94,15 @@ static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
       break;
     }
     case 5: {
+      uint32_t limit = game_state_get_boost_max_limit_percent();
+      uint32_t cost = game_state_get_boost_limit_cost();
+      snprintf(sub_buf, sizeof(sub_buf), "Lvl %d (%lu%%) | Cost: %lu¢",
+               game->data.upgrade_boost_limit_lvl, (unsigned long)limit,
+               (unsigned long)cost);
+      menu_cell_basic_draw(ctx, cell_layer, "Boost Max Limit", sub_buf, NULL);
+      break;
+    }
+    case 6: {
       uint32_t cost = game_state_get_offline_cap_cost();
       if (!game_state_is_offline_unlocked()) {
         snprintf(sub_buf, sizeof(sub_buf), "Unlock 15m | Cost: %lu¢", (unsigned long)cost);
@@ -133,6 +142,9 @@ static void prv_menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_inde
       bought = game_state_buy_boost_diminish();
       break;
     case 5:
+      bought = game_state_buy_boost_limit();
+      break;
+    case 6:
       bought = game_state_buy_offline_cap();
       break;
     default:
