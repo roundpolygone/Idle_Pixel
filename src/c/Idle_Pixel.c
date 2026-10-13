@@ -9,10 +9,11 @@ static Window *s_window;
 static AppTimer *s_tick_timer = NULL;
 
 static void prv_timer_callback(void *data) {
+  uint32_t tick_interval = game_state_is_transition_active() ? 33 : TICK_INTERVAL_MS;
   bool pixel_added = false;
   bool fill_completed = false;
 
-  game_state_tick(TICK_INTERVAL_MS, &pixel_added, &fill_completed);
+  game_state_tick(tick_interval, &pixel_added, &fill_completed);
 
   GameState *game = game_state_get();
   if (fill_completed && game->data.option_vibration) {
@@ -21,13 +22,15 @@ static void prv_timer_callback(void *data) {
 
   ui_grid_mark_dirty();
 
-  s_tick_timer = app_timer_register(TICK_INTERVAL_MS, prv_timer_callback, NULL);
+  s_tick_timer = app_timer_register(tick_interval, prv_timer_callback, NULL);
 }
 
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (game_state_is_transition_active()) {
-    game_state_dismiss_transition();
-    ui_grid_mark_dirty();
+    if (game_state_is_transition_anim_done()) {
+      game_state_dismiss_transition();
+      ui_grid_mark_dirty();
+    }
     return;
   }
   // Shortcut to clock page
@@ -36,8 +39,10 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (game_state_is_transition_active()) {
-    game_state_dismiss_transition();
-    ui_grid_mark_dirty();
+    if (game_state_is_transition_anim_done()) {
+      game_state_dismiss_transition();
+      ui_grid_mark_dirty();
+    }
     return;
   }
   ui_menu_show();
@@ -45,8 +50,10 @@ static void prv_select_click_handler(ClickRecognizerRef recognizer, void *contex
 
 static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (game_state_is_transition_active()) {
-    game_state_dismiss_transition();
-    ui_grid_mark_dirty();
+    if (game_state_is_transition_anim_done()) {
+      game_state_dismiss_transition();
+      ui_grid_mark_dirty();
+    }
     return;
   }
   game_state_activate_boost();

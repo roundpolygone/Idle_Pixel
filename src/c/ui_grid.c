@@ -161,45 +161,63 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
   graphics_draw_rect(ctx, GRect(grid_x - 2, grid_y - 2, grid_w + 4, grid_h + 4));
 
   // 8. Render 8x8 Tier 1 Grid with Active Solid Color & Wipe/Rise Animation
-  uint32_t cur_pix = game->data.current_pixels;
-  GColor active_solid_color = game_state_get_active_solid_color();
+  uint32_t anim_ms = game_state_get_transition_anim_ms();
+  bool in_fuse_phase = (game_state_is_transition_active() && anim_ms < 400);
 
-  for (uint8_t row = 0; row < GRID_SIZE; row++) {
-    for (uint8_t col = 0; col < GRID_SIZE; col++) {
-      uint8_t seq_idx = game_state_get_order_index(row, col);
-      int x = grid_x + (col * step);
-      int y = grid_y + (row * step);
-      GRect cell_rect = GRect(x, y, cell_size, cell_size);
+  if (in_fuse_phase) {
+    // Stage 1: The entire grid fuses into one continuous solid block!
+    uint8_t fuse_color_idx = game_state_get_transition_completed_color();
+    GColor fuse_col = game_state_get_pixel_color(fuse_color_idx);
 
-      if (seq_idx < cur_pix) {
-        // Fully filled pixel
-        graphics_context_set_fill_color(ctx, active_solid_color);
-        graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
-      } else if (seq_idx == cur_pix) {
-        // Active filling pixel: Wipe / Rise liquid animation from bottom
-        graphics_context_set_fill_color(ctx, empty_cell_bg);
-        graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
+    graphics_context_set_fill_color(ctx, fuse_col);
+    graphics_fill_rect(ctx, GRect(grid_x, grid_y, grid_w, grid_h), 2, GCornersAll);
 
-        int fill_h = (int)((game->data.progress_ms * (uint32_t)cell_size) / (base_int > 0 ? base_int : 1));
-        if (fill_h > cell_size) {
-          fill_h = cell_size;
-        }
+    // Glowing white border around fused block
+    graphics_context_set_stroke_color(ctx, GColorWhite);
+    graphics_draw_rect(ctx, GRect(grid_x - 1, grid_y - 1, grid_w + 2, grid_h + 2));
+    graphics_draw_rect(ctx, GRect(grid_x, grid_y, grid_w, grid_h));
+  } else {
+    // Normal Tier 1 cell-by-cell liquid wipe rendering
+    uint32_t cur_pix = game->data.current_pixels;
+    GColor active_solid_color = game_state_get_active_solid_color();
 
-        if (fill_h > 0) {
-          GRect liquid_rect = GRect(x, y + cell_size - fill_h, cell_size, fill_h);
+    for (uint8_t row = 0; row < GRID_SIZE; row++) {
+      for (uint8_t col = 0; col < GRID_SIZE; col++) {
+        uint8_t seq_idx = game_state_get_order_index(row, col);
+        int x = grid_x + (col * step);
+        int y = grid_y + (row * step);
+        GRect cell_rect = GRect(x, y, cell_size, cell_size);
+
+        if (seq_idx < cur_pix) {
+          // Fully filled pixel
           graphics_context_set_fill_color(ctx, active_solid_color);
-          graphics_fill_rect(ctx, liquid_rect, 0, GCornerNone);
-        }
+          graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
+        } else if (seq_idx == cur_pix) {
+          // Active filling pixel: Wipe / Rise liquid animation from bottom
+          graphics_context_set_fill_color(ctx, empty_cell_bg);
+          graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
 
-        // Active border
-        graphics_context_set_stroke_color(ctx, active_cell_stroke);
-        graphics_draw_rect(ctx, cell_rect);
-      } else {
-        // Empty pixel
-        graphics_context_set_fill_color(ctx, empty_cell_bg);
-        graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
-        graphics_context_set_stroke_color(ctx, empty_cell_stroke);
-        graphics_draw_rect(ctx, cell_rect);
+          int fill_h = (int)((game->data.progress_ms * (uint32_t)cell_size) / (base_int > 0 ? base_int : 1));
+          if (fill_h > cell_size) {
+            fill_h = cell_size;
+          }
+
+          if (fill_h > 0) {
+            GRect liquid_rect = GRect(x, y + cell_size - fill_h, cell_size, fill_h);
+            graphics_context_set_fill_color(ctx, active_solid_color);
+            graphics_fill_rect(ctx, liquid_rect, 0, GCornerNone);
+          }
+
+          // Active border
+          graphics_context_set_stroke_color(ctx, active_cell_stroke);
+          graphics_draw_rect(ctx, cell_rect);
+        } else {
+          // Empty pixel
+          graphics_context_set_fill_color(ctx, empty_cell_bg);
+          graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
+          graphics_context_set_stroke_color(ctx, empty_cell_stroke);
+          graphics_draw_rect(ctx, cell_rect);
+        }
       }
     }
   }
@@ -243,8 +261,8 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
                      GTextAlignmentCenter,
                      NULL);
 
-  // 10. Tier 2 Celebration Modal Popup (active when a solid color finishes)
-  if (game_state_is_transition_active()) {
+  // 10. Tier 2 Celebration Modal Popup (active when anim_ms >= 400ms)
+  if (game_state_is_transition_active() && anim_ms >= 400) {
     int modal_w = bounds.size.w - 16;
     int modal_h = bounds.size.h - 26;
     int modal_x = 8;
@@ -286,15 +304,21 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
     }
 
     // Mini 8x8 Tier 2 Grid
-    int mini_cell = 8;
-    int mini_step = 9;
-    int mini_grid_w = (GRID_SIZE * mini_step) - 1; // 71px
+    int mini_cell = (bounds.size.w >= 200) ? 10 : 8;
+    int mini_step = mini_cell + 1;
+    int mini_grid_w = (GRID_SIZE * mini_step) - 1;
     int mini_grid_x = modal_x + (modal_w - mini_grid_w) / 2;
-    int mini_grid_y = modal_y + 26;
+    int mini_grid_y = modal_y + ((bounds.size.w >= 200) ? 36 : 26);
 
-    // The slot that was just completed:
-    // If just earned gold pixel, all 64 were filled. Otherwise tier2_pixels was incremented (or 64th slot).
-    uint8_t completed_slot = (game->data.tier2_pixels == 0) ? 63 : (game->data.tier2_pixels - 1);
+    uint8_t completed_color = game_state_get_transition_completed_color();
+    GColor completed_col = game_state_get_pixel_color(completed_color);
+
+    int target_r = completed_color / GRID_SIZE;
+    int target_c = completed_color % GRID_SIZE;
+    int target_x = mini_grid_x + (target_c * mini_step);
+    int target_y = mini_grid_y + (target_r * mini_step);
+    int target_w = mini_cell;
+    int target_h = mini_cell;
 
     for (uint8_t r = 0; r < GRID_SIZE; r++) {
       for (uint8_t c = 0; c < GRID_SIZE; c++) {
@@ -303,20 +327,34 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
         int sy = mini_grid_y + (r * mini_step);
         GRect slot_rect = GRect(sx, sy, mini_cell, mini_cell);
 
-        bool is_filled = (slot_idx < game->data.tier2_pixels) ||
-                         (game->gold_pixel_just_earned) ||
-                         (slot_idx == completed_slot);
-
-        if (is_filled) {
+        if (slot_idx < completed_color) {
+          // Already completed earlier
           GColor slot_col = game_state_get_pixel_color(slot_idx);
           graphics_context_set_fill_color(ctx, slot_col);
           graphics_fill_rect(ctx, slot_rect, 0, GCornerNone);
+        } else if (slot_idx == completed_color) {
+          // The newly completed slot: only show as filled once block lands (anim_ms >= 1200)
+          if (anim_ms >= 1200) {
+            graphics_context_set_fill_color(ctx, completed_col);
+            graphics_fill_rect(ctx, slot_rect, 0, GCornerNone);
 
-          if (slot_idx == completed_slot) {
+            if (anim_ms < 1500 && ((anim_ms / 60) % 2 == 0)) {
+              // Impact flash pulse
+              graphics_context_set_stroke_color(ctx, GColorWhite);
+              graphics_draw_rect(ctx, GRect(sx - 1, sy - 1, mini_cell + 2, mini_cell + 2));
+            } else {
+              graphics_context_set_stroke_color(ctx, GColorWhite);
+              graphics_draw_rect(ctx, slot_rect);
+            }
+          } else {
+            // Unfilled socket waiting for shrinking block to arrive
+            graphics_context_set_fill_color(ctx, GColorBlack);
+            graphics_fill_rect(ctx, slot_rect, 0, GCornerNone);
             graphics_context_set_stroke_color(ctx, GColorWhite);
             graphics_draw_rect(ctx, slot_rect);
           }
         } else {
+          // Future slots
           graphics_context_set_fill_color(ctx, GColorBlack);
           graphics_fill_rect(ctx, slot_rect, 0, GCornerNone);
           graphics_context_set_stroke_color(ctx, GColorDarkGray);
@@ -325,13 +363,34 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
       }
     }
 
+    // Shrinking and flying block animation (400ms to 1200ms)
+    if (anim_ms < 1200) {
+      int t_ms = (int)(anim_ms - 400);
+      int duration = 800;
+      // Quadratic ease out: (t/d) * (2 - t/d) * 1000
+      int ease_num = (t_ms * 2000 - ((t_ms * t_ms) / duration) * 1000) / duration;
+      if (ease_num < 0) ease_num = 0;
+      if (ease_num > 1000) ease_num = 1000;
+
+      int cur_x = grid_x + ((target_x - grid_x) * ease_num) / 1000;
+      int cur_y = grid_y + ((target_y - grid_y) * ease_num) / 1000;
+      int cur_w = grid_w + ((target_w - grid_w) * ease_num) / 1000;
+      int cur_h = grid_h + ((target_h - grid_h) * ease_num) / 1000;
+
+      GRect fly_rect = GRect(cur_x, cur_y, cur_w, cur_h);
+      graphics_context_set_fill_color(ctx, completed_col);
+      graphics_fill_rect(ctx, fly_rect, (cur_w > 16 ? 2 : 0), GCornersAll);
+      graphics_context_set_stroke_color(ctx, GColorWhite);
+      graphics_draw_rect(ctx, fly_rect);
+    }
+
     // Modal subtitle
     char sub_buf[40];
     if (game->gold_pixel_just_earned) {
       snprintf(sub_buf, sizeof(sub_buf), "Total Gold: %lu", (unsigned long)game->data.gold_pixels);
       graphics_context_set_text_color(ctx, GColorYellow);
     } else {
-      snprintf(sub_buf, sizeof(sub_buf), "Color %u Filled!", (unsigned int)(completed_slot + 1));
+      snprintf(sub_buf, sizeof(sub_buf), "Color #%u Complete!", (unsigned int)(completed_color + 1));
       graphics_context_set_text_color(ctx, GColorWhite);
     }
 
@@ -343,12 +402,21 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
                        NULL);
 
     graphics_context_set_text_color(ctx, GColorLightGray);
-    graphics_draw_text(ctx, "[Click to Continue]",
-                       fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(modal_x, mini_grid_y + mini_grid_w + 19, modal_w, 16),
-                       GTextOverflowModeWordWrap,
-                       GTextAlignmentCenter,
-                       NULL);
+    if (game_state_is_transition_anim_done()) {
+      graphics_draw_text(ctx, "[Press Any Button]",
+                         fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                         GRect(modal_x, mini_grid_y + mini_grid_w + 19, modal_w, 16),
+                         GTextOverflowModeWordWrap,
+                         GTextAlignmentCenter,
+                         NULL);
+    } else {
+      graphics_draw_text(ctx, "Fusing into Tier 2...",
+                         fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(modal_x, mini_grid_y + mini_grid_w + 19, modal_w, 16),
+                         GTextOverflowModeWordWrap,
+                         GTextAlignmentCenter,
+                         NULL);
+    }
   }
 }
 

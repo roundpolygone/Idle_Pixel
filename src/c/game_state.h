@@ -83,7 +83,10 @@ typedef struct {
   uint32_t offline_pixels_gained;
   uint8_t random_grid_order[TOTAL_PIXELS]; // shuffled order for RANDOM fill mode
   OfflineSummary offline_summary;
-  uint32_t tier2_transition_timer_ms;      // countdown for Tier 2 celebration popup
+  bool transition_active;                  // true while Tier 2 transition/preview is shown
+  uint32_t transition_anim_ms;             // animation elapsed time
+  bool transition_anim_done;               // true once shrink-down animation completes
+  uint8_t transition_completed_color;      // color index that just fused & shrank
   bool gold_pixel_just_earned;             // flag for golden celebration banner
 } GameState;
 
@@ -91,7 +94,10 @@ void game_state_init(void);
 void game_state_save(void);
 void game_state_hard_reset(void);
 bool game_state_is_transition_active(void);
+bool game_state_is_transition_anim_done(void);
 void game_state_dismiss_transition(void);
+uint32_t game_state_get_transition_anim_ms(void);
+uint8_t game_state_get_transition_completed_color(void);
 GColor game_state_get_active_solid_color(void);
 void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_completed);
 void game_state_activate_boost(void);

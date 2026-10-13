@@ -41,11 +41,11 @@ In **Idle_Pixel**, the core objective is to progressively fill an 8x8 display ca
 - Contains **64 individual vertical color slices** building bottom-up.
 - Completing a full 8x8 solid color grid fills 1/64th of the vertical gauge with that solid color.
 
-### 3. Tier 2: The 64-Color Grid & Celebration Modal
-- Completing a solid color grid in Tier 1 locks that color into its respective slot in the **Tier 2 (64 Colors) Grid**.
-- **Celebration Popup**: A brief (~1.2s) popup modal appears, showcasing the 8x8 Tier 2 grid lighting up the newly completed color slot.
-- Once completed, Tier 1 immediately starts filling the next color ($C + 1$).
-- **Instant Skip**: Pressing any watch button (`UP`, `SELECT`, or `DOWN`) during the celebration popup immediately dismisses it, ensuring gameplay is never delayed.
+### 3. Tier 2: The 64-Color Grid & Fuse-and-Shrink Celebration
+- **Fusing Animation**: When the 64th pixel of a solid grid completes, all individual cell borders dissolve and the entire 8x8 canvas fuses into **one monolithic, glowing solid block** of that color.
+- **Shrinking Down**: The Tier 2 palette appears, and the solid block smoothly shrinks down and glides into its exact target slot on the Tier 2 grid, locking in with an impact pulse.
+- **Persistent Preview**: The preview modal does **not** auto-dismiss. It stays on screen indefinitely so you never miss seeing your completed color palette and progression!
+- **Protected Dismissal**: To prevent accidental skipping, the preview can only be dismissed by pressing any button (`UP`, `SELECT`, or `DOWN`) **after the shrink animation has finished**, at which point Tier 1 begins filling the next color.
 
 ### 4. Gold Pixels (Milestone Currency)
 - Completing all 64 solid color grids fills the Tier 2 grid completely ($64 \times 64 = 4,096$ pixels).
