@@ -1,5 +1,6 @@
 #include "ui_options.h"
 #include "game_state.h"
+#include "ui_save_slots.h"
 
 static Window *s_options_window = NULL;
 static MenuLayer *s_menu_layer = NULL;
@@ -90,7 +91,7 @@ static void prv_show_reset_confirmation(void) {
 // Options Menu
 // -------------------------------------------------------------
 static uint16_t prv_menu_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
-  return 4;
+  return 5;
 }
 
 static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -98,18 +99,21 @@ static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
 
   switch (cell_index->row) {
     case 0:
-      menu_cell_basic_draw(ctx, cell_layer, "Clock Style",
-                           game->data.option_analog_clock ? "Analog" : "Digital", NULL);
-      break;
-    case 1:
       menu_cell_basic_draw(ctx, cell_layer, "Time Format",
                            game->data.option_24h ? "24-Hour" : "12-Hour", NULL);
+      break;
+    case 1:
+      menu_cell_basic_draw(ctx, cell_layer, "Seconds",
+                           game->data.option_show_seconds ? "ON" : "OFF", NULL);
       break;
     case 2:
       menu_cell_basic_draw(ctx, cell_layer, "Vibration",
                            game->data.option_vibration ? "ON" : "OFF", NULL);
       break;
     case 3:
+      menu_cell_basic_draw(ctx, cell_layer, "Save & Load Slots", "Manage enumerated saves", NULL);
+      break;
+    case 4:
       menu_cell_basic_draw(ctx, cell_layer, "Reset Game", "Wipe all data & restart", NULL);
       break;
     default:
@@ -122,24 +126,28 @@ static void prv_menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_inde
 
   switch (cell_index->row) {
     case 0:
-      game->data.option_analog_clock = !game->data.option_analog_clock;
+      game->data.option_24h = !game->data.option_24h;
       game_state_save();
       menu_layer_reload_data(menu_layer);
       break;
     case 1:
-      game->data.option_24h = !game->data.option_24h;
+      game->data.option_show_seconds = !game->data.option_show_seconds;
       game_state_save();
+      game_state_weak_vibe();
       menu_layer_reload_data(menu_layer);
       break;
     case 2:
       game->data.option_vibration = !game->data.option_vibration;
       if (game->data.option_vibration) {
-        vibes_short_pulse();
+        game_state_weak_vibe();
       }
       game_state_save();
       menu_layer_reload_data(menu_layer);
       break;
     case 3:
+      ui_save_slots_show();
+      break;
+    case 4:
       prv_show_reset_confirmation();
       break;
     default:

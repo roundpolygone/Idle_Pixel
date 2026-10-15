@@ -44,6 +44,7 @@ static void prv_content_update_proc(Layer *layer, GContext *ctx) {
   prv_format_duration(summary->credited_sec, credited_str, sizeof(credited_str));
 
   char body_buf[160];
+  uint32_t eff_pct = game_state_get_offline_speed_percent();
   if (!game_state_is_offline_unlocked()) {
     snprintf(body_buf, sizeof(body_buf),
              "Away: %s\nCredited: 0m\n\nIdle time locked!\nUnlock in Store (1¢)\n\n+0 Pixels",
@@ -51,14 +52,14 @@ static void prv_content_update_proc(Layer *layer, GContext *ctx) {
   } else {
     if (summary->fills_gained > 0) {
       snprintf(body_buf, sizeof(body_buf),
-               "Away: %s\nCredited: %s\n\n+%lu Pixels\n+%lu Full Fills!",
-               away_str, credited_str,
+               "Away: %s (%lu%% speed)\nCredited: %s\n\n+%lu Pixels\n+%lu Full Fills!",
+               away_str, (unsigned long)eff_pct, credited_str,
                (unsigned long)summary->pixels_gained,
                (unsigned long)summary->fills_gained);
     } else {
       snprintf(body_buf, sizeof(body_buf),
-               "Away: %s\nCredited: %s\n\n+%lu Pixels Filled",
-               away_str, credited_str,
+               "Away: %s (%lu%% speed)\nCredited: %s\n\n+%lu Pixels Filled",
+               away_str, (unsigned long)eff_pct, credited_str,
                (unsigned long)summary->pixels_gained);
     }
   }

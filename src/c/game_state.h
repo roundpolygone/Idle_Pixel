@@ -10,14 +10,24 @@
 #define MIN_BASE_INTERVAL_MS 500      // 500ms safety floor
 #define TICK_INTERVAL_MS 100          // 10 Hz game loop
 
-#define SAVE_VERSION 7
-#define PERSIST_KEY_GAME_DATA 100
+// Build configuration: Set to 1 to enable developer tools & testing menu; set to 0 for release builds.
+#ifndef ENABLE_DEV_MENU
+#define ENABLE_DEV_MENU 0
+#endif
 
-#define UNLOCK_BG_COLORS_COUNT 64
+#define SAVE_VERSION 8
+#define NUM_SAVE_SLOTS 3
+#define PERSIST_KEY_ACTIVE_SLOT 99
+#define PERSIST_KEY_GAME_DATA 100
+#define PERSIST_KEY_SLOT_BASE 101 // Slots 101, 102, 103
+
+// Unlockable cosmetics: 13 background colors, 7 fill orders, 3 fonts, 5 clock styles (28 total unlocks)
+#define UNLOCK_BG_COLORS_COUNT 13
 #define BG_COLOR_AUTO 255
-#define UNLOCK_FILL_ORDERS_COUNT 6
-#define UNLOCK_FONTS_COUNT 4
-#define UNLOCK_CLOCK_STYLES_COUNT 4
+#define UNLOCK_FILL_ORDERS_COUNT 7
+#define UNLOCK_FONTS_COUNT 3
+#define UNLOCK_CLOCK_STYLES_COUNT 5
+#define TOTAL_MAX_UNLOCKS 28
 
 typedef enum {
   FILL_ORDER_NORMAL = 0,
@@ -25,7 +35,9 @@ typedef enum {
   FILL_ORDER_CW_SPIRAL = 2,
   FILL_ORDER_CCW_SPIRAL = 3,
   FILL_ORDER_ZIG_ZAG = 4,
-  FILL_ORDER_RANDOM = 5,
+  FILL_ORDER_UP_AND_DOWN = 5,
+  FILL_ORDER_CHECKERBOARD = 6,
+  FILL_ORDER_RANDOM = 7,
 } FillOrderType;
 
 typedef struct {
@@ -58,26 +70,40 @@ typedef struct __attribute__((__packed__)) {
   uint8_t upgrade_boost_diminish_lvl;// lvl 0 = 10.0%/s (slower decay per lvl)
   uint8_t upgrade_boost_limit_lvl;   // lvl 0 = 100% max limit (+25% per lvl)
   uint8_t upgrade_offline_cap_lvl;   // lvl 0 = 0m (locked), lvl 1 = 15m (+15m per lvl)
+  uint8_t upgrade_hold_boost_lvl;    // NEW: +10% clicks/sec per level (base 1.0 click/s)
+  uint8_t upgrade_offline_speed_lvl; // NEW: +10% closed game speed (base 10%, max lvl 9 = 100%)
 
   // Unlocks & Selections
-  uint8_t unlocked_bg_colors;      // 1 to 64
+  uint8_t unlocked_bg_colors;      // 1 to 54 (1 default + up to 53 unlocked)
   uint8_t selected_bg_color_index; // 0 to 63 or BG_COLOR_AUTO
 
-  uint8_t unlocked_fill_orders;    // 1 to 6
+  uint8_t unlocked_fill_orders;    // 1 to 6 (1 default + up to 5 unlocked)
   uint8_t selected_fill_order;     // FillOrderType
 
-  uint8_t unlocked_fonts;          // 1 to 4
+  uint8_t unlocked_fonts;          // 1 to 4 (1 default + up to 3 unlocked)
   uint8_t selected_font;           // 0 to 3
 
-  uint8_t unlocked_clock_styles;   // 1 to 4
+  uint8_t unlocked_clock_styles;   // 1 to 4 (1 default + up to 3 unlocked)
   uint8_t selected_clock_style;    // 0 to 3
 
   // Options
   bool option_vibration;           // vibration toggle (default true)
   bool option_analog_clock;        // false = digital, true = analog
   bool option_24h;                 // false = 12h, true = 24h
+  bool option_show_seconds;        // show seconds in clock (digital or analogue)
 
   time_t last_save_time;           // epoch seconds
+
+  // Stats & Progress tracking
+  time_t   date_started;           // When this save was started
+  uint32_t active_play_sec;        // In-game time
+  uint32_t offline_play_sec;       // Away time
+  uint32_t completion_time_sec;    // Time when 64 colors completed (0 if not yet)
+  uint32_t total_currency_earned;  // Lifetime currency earned
+  uint32_t total_currency_spent;   // Lifetime currency spent
+  bool     is_completed;           // Game won flag
+  bool     is_used;                // Slot used flag
+  uint64_t favourite_colors;       // 64-bit mask for favourite colors
 } GameSaveData;
 
 typedef enum {
@@ -99,11 +125,37 @@ typedef struct {
   uint32_t transition_anim_ms;             // animation elapsed time
   uint8_t transition_completed_color;      // color index that completed
   bool gold_pixel_just_earned;             // flag for golden celebration banner
+
+  // Background fill behind preview & clock mode
+  uint32_t preview_background_pixels;      // pixels filled behind completed color preview
+  bool is_clock_active;                    // true when clock face is showing
+  uint8_t active_slot;                     // 0, 1, or 2
+  bool win_just_triggered;                 // true when 64 colors completed
 } GameState;
+
+typedef struct {
+  bool is_used;
+  bool is_completed;
+  time_t date_started;
+  uint32_t total_time_sec;
+  uint32_t completion_time_sec;
+  uint8_t tier2_pixels;
+  uint32_t gold_pixels;
+} SaveSlotInfo;
 
 void game_state_init(void);
 void game_state_save(void);
 void game_state_hard_reset(void);
+
+// Currency formatting helper
+void game_state_format_currency(uint32_t cents, char *buf, size_t buf_size);
+
+// Save slot management
+uint8_t game_state_get_active_slot(void);
+void game_state_get_slot_info(uint8_t slot_idx, SaveSlotInfo *out_info);
+bool game_state_switch_to_slot(uint8_t slot_idx);
+bool game_state_save_to_slot(uint8_t slot_idx);
+bool game_state_clear_slot(uint8_t slot_idx);
 
 // View mode controls
 GridViewMode game_state_get_view_mode(void);
@@ -116,6 +168,13 @@ void game_state_start_transition_anim(void);
 void game_state_finish_transition(void);
 uint32_t game_state_get_transition_anim_ms(void);
 uint8_t game_state_get_transition_completed_color(void);
+
+// Clock active mode
+void game_state_set_clock_active(bool active);
+bool game_state_is_clock_active(void);
+
+// Win game trigger
+bool game_state_check_and_clear_win_trigger(void);
 
 GColor game_state_get_active_solid_color(void);
 GColor game_state_get_ink_color(void);
@@ -136,6 +195,14 @@ void game_state_get_current_boost_parts(uint32_t *out_whole, uint32_t *out_tenth
 uint32_t game_state_get_max_offline_sec(void);
 bool game_state_is_offline_unlocked(void);
 
+// Hold boost rate calculation
+uint32_t game_state_get_hold_boost_clicks_whole(void);
+uint32_t game_state_get_hold_boost_clicks_tenths(void);
+uint32_t game_state_get_hold_boost_interval_ms(void);
+
+// Away idle speed percentage
+uint32_t game_state_get_offline_speed_percent(void);
+
 // Pixels per second calculation
 void game_state_get_pps(uint32_t *out_whole, uint32_t *out_hundredths);
 
@@ -153,6 +220,8 @@ uint32_t game_state_get_boost_sustain_cost(void);
 uint32_t game_state_get_boost_diminish_cost(void);
 uint32_t game_state_get_boost_limit_cost(void);
 uint32_t game_state_get_offline_cap_cost(void);
+uint32_t game_state_get_hold_boost_cost(void);
+uint32_t game_state_get_offline_speed_cost(void);
 
 // Store actions
 bool game_state_buy_fill_speed(void);
@@ -162,8 +231,11 @@ bool game_state_buy_boost_sustain(void);
 bool game_state_buy_boost_diminish(void);
 bool game_state_buy_boost_limit(void);
 bool game_state_buy_offline_cap(void);
+bool game_state_buy_hold_boost(void);
+bool game_state_buy_offline_speed(void);
 
 // Unlock currency spending actions
+uint32_t game_state_get_total_unlocks_count(void);
 bool game_state_can_unlock_bg_color(void);
 bool game_state_buy_next_bg_color(void);
 
@@ -181,7 +253,16 @@ OfflineSummary* game_state_get_offline_summary(void);
 GColor game_state_get_pixel_color(uint8_t index);
 GColor game_state_get_bg_color(void);
 bool game_state_is_color_dark(GColor color);
+const char* game_state_get_color_name(uint8_t index);
+bool game_state_is_color_favourite(uint8_t index);
+void game_state_toggle_color_favourite(uint8_t index);
 const char* game_state_get_fill_order_name(FillOrderType order);
 const char* game_state_get_font_name(uint8_t font_idx);
 const char* game_state_get_clock_style_name(uint8_t style_idx);
 GFont game_state_get_font(uint8_t font_idx, bool large);
+uint8_t game_state_get_unlockable_bg_color(uint8_t index);
+const char* game_state_get_unlockable_bg_color_name(uint8_t index);
+void game_state_dev_add_cents(uint32_t cents);
+void game_state_dev_add_unlock_points(uint32_t points);
+void game_state_weak_vibe(void);
+void game_state_cycle_bg_color(void);

@@ -5,12 +5,19 @@
 #include "ui_unlocks.h"
 #include "ui_options.h"
 #include "ui_clock.h"
+#if ENABLE_DEV_MENU
+#include "ui_dev_menu.h"
+#endif
 
 static Window *s_main_menu_window = NULL;
 static MenuLayer *s_menu_layer = NULL;
 
 static uint16_t prv_menu_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
+#if ENABLE_DEV_MENU
+  return 6;
+#else
   return 5;
+#endif
 }
 
 static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -25,11 +32,16 @@ static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
       menu_cell_basic_draw(ctx, cell_layer, "Unlocks", "Colors & custom items", NULL);
       break;
     case 3:
-      menu_cell_basic_draw(ctx, cell_layer, "Options", "Vibe, clock & format", NULL);
+      menu_cell_basic_draw(ctx, cell_layer, "Options", "Format & Saves", NULL);
       break;
     case 4:
       menu_cell_basic_draw(ctx, cell_layer, "Clock", "Open clock face", NULL);
       break;
+#if ENABLE_DEV_MENU
+    case 5:
+      menu_cell_basic_draw(ctx, cell_layer, "Dev Menu", "Cents & points ticker", NULL);
+      break;
+#endif
     default:
       break;
   }
@@ -52,6 +64,11 @@ static void prv_menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_inde
     case 4:
       ui_clock_show();
       break;
+#if ENABLE_DEV_MENU
+    case 5:
+      ui_dev_menu_show();
+      break;
+#endif
     default:
       break;
   }

@@ -29,9 +29,11 @@ static void prv_content_update_proc(Layer *layer, GContext *ctx) {
              "Solid Grids: 0\nNeed >= 1 filled solid grid (1¢) to prestige.\n\n[BACK to return]");
     graphics_context_set_text_color(ctx, GColorLightGray);
   } else {
+    char gain_str[24];
+    game_state_format_currency(solid_grids, gain_str, sizeof(gain_str));
     snprintf(info_buf, sizeof(info_buf),
-             "Solid Grids: %lu\nGain: %lu¢\n\nResets solid grids!\n(Keeps Gold Pixels)\n\n[SELECT] Confirm\n[BACK] Cancel",
-             (unsigned long)solid_grids, (unsigned long)solid_grids);
+             "Solid Grids: %lu\nGain: %s\n\nResets solid grids!\n(Keeps Gold Pixels)\n\n[SELECT] Confirm\n[BACK] Cancel",
+             (unsigned long)solid_grids, gain_str);
     graphics_context_set_text_color(ctx, GColorWhite);
   }
 

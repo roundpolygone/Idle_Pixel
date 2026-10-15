@@ -9,6 +9,11 @@ build/
 *.auto.c
 *.auto.h
 
+# Screenshots and scratch development data
+pebble_screenshot_*
+*.png
+dev_*
+
 # Editor and IDE configurations
 .vscode/
 .idea/

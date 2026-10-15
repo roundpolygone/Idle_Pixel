@@ -2,24 +2,56 @@
 #include "game_state.h"
 #include "ui_grid.h"
 #include "ui_menu.h"
+#include "ui_clock.h"
+#include "ui_win.h"
 #include "ui_offline_summary.h"
 
 static Window *s_window;
 static AppTimer *s_tick_timer = NULL;
+static bool s_down_held = false;
+static uint32_t s_down_hold_timer_ms = 0;
 
 static void prv_timer_callback(void *data) {
-  uint32_t tick_interval = game_state_is_transition_active() ? 33 : TICK_INTERVAL_MS;
+  GameState *game = game_state_get();
+  uint32_t tick_interval = (game_state_is_transition_active() || ui_grid_is_zooming() || (game->current_boost_milli > 0)) ? 33 : TICK_INTERVAL_MS;
   bool pixel_added = false;
   bool fill_completed = false;
 
+  // Advance zoom transition if active
+  if (ui_grid_is_zooming()) {
+    ui_grid_tick_zoom(tick_interval);
+  }
+
+  // Handle auto-press boost while Down button is held (on main view or clock face)
+  bool down_held = (s_down_held && game_state_get_view_mode() == VIEW_MODE_TIER1) ||
+                   (ui_clock_is_down_held() && game_state_is_clock_active());
+  if (down_held) {
+    s_down_hold_timer_ms += tick_interval;
+    uint32_t hold_interval = game_state_get_hold_boost_interval_ms();
+    while (s_down_hold_timer_ms >= hold_interval) {
+      s_down_hold_timer_ms -= hold_interval;
+      game_state_activate_boost();
+    }
+  }
+
   game_state_tick(tick_interval, &pixel_added, &fill_completed);
 
-  GameState *game = game_state_get();
   if (fill_completed && game->data.option_vibration) {
     vibes_short_pulse();
   }
 
-  ui_grid_mark_dirty();
+  // Check if win game celebration was triggered
+  if (game_state_check_and_clear_win_trigger()) {
+    ui_win_show();
+  }
+
+  if (game_state_is_clock_active()) {
+    if (game->current_boost_milli > 0) {
+      ui_clock_mark_dirty();
+    }
+  } else {
+    ui_grid_mark_dirty();
+  }
 
   s_tick_timer = app_timer_register(tick_interval, prv_timer_callback, NULL);
 }
@@ -40,11 +72,18 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (prv_handle_transition_click()) {
     return;
   }
-  // Up button zooms out to Tier 2 grid
+  // Up button smoothly zooms out to Tier 2 grid
   if (game_state_get_view_mode() == VIEW_MODE_TIER1) {
-    game_state_set_view_mode(VIEW_MODE_TIER2);
-    ui_grid_mark_dirty();
+    ui_grid_start_zoom_out();
   }
+}
+
+static void prv_up_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
+  if (prv_handle_transition_click()) {
+    return;
+  }
+  // Hold UP for clock face
+  ui_clock_show();
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -60,13 +99,31 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context)
   }
   // On Tier 2 screen, down zooms into Tier 1 grid
   if (game_state_get_view_mode() == VIEW_MODE_TIER2) {
-    game_state_set_view_mode(VIEW_MODE_TIER1);
-    ui_grid_mark_dirty();
+    ui_grid_start_zoom_in();
     return;
   }
   // On Tier 1 screen, down activates boost
   game_state_activate_boost();
   ui_grid_mark_dirty();
+}
+
+static void prv_down_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
+  if (prv_handle_transition_click()) {
+    return;
+  }
+  if (game_state_get_view_mode() == VIEW_MODE_TIER2) {
+    ui_grid_start_zoom_in();
+    return;
+  }
+  s_down_held = true;
+  s_down_hold_timer_ms = 0;
+  game_state_activate_boost();
+  ui_grid_mark_dirty();
+}
+
+static void prv_down_long_click_up_handler(ClickRecognizerRef recognizer, void *context) {
+  s_down_held = false;
+  s_down_hold_timer_ms = 0;
 }
 
 static void prv_back_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -75,8 +132,7 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *context)
   }
   // On Tier 2 screen, back zooms into Tier 1 grid
   if (game_state_get_view_mode() == VIEW_MODE_TIER2) {
-    game_state_set_view_mode(VIEW_MODE_TIER1);
-    ui_grid_mark_dirty();
+    ui_grid_start_zoom_in();
     return;
   }
   window_stack_pop(true);
@@ -84,9 +140,16 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *context)
 
 static void prv_click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_BACK, prv_back_click_handler);
+
+  // UP button: Single click to zoom out, hold for Clock
   window_single_click_subscribe(BUTTON_ID_UP, prv_up_click_handler);
+  window_long_click_subscribe(BUTTON_ID_UP, 500, prv_up_long_click_down_handler, NULL);
+
   window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
+
+  // DOWN button: Single click to boost (or zoom in), hold for Auto-Boost
   window_single_click_subscribe(BUTTON_ID_DOWN, prv_down_click_handler);
+  window_long_click_subscribe(BUTTON_ID_DOWN, 400, prv_down_long_click_down_handler, prv_down_long_click_up_handler);
 }
 
 static void prv_window_load(Window *window) {
