@@ -80,18 +80,14 @@ static void prv_draw_tier2_view(Layer *layer, GContext *ctx) {
     grid_y = 26;
     footer_y = 171;
   }
-#if defined(PBL_ROUND)
-  header_y = 6;
-  grid_y = 26;
-  footer_y = 138;
-#endif
 
   // 3. Header
   char header_buf[32];
-  if (game->data.gold_pixels > 0) {
-    snprintf(header_buf, sizeof(header_buf), "TIER 2 | GP %lu", (unsigned long)game->data.gold_pixels);
+  uint32_t crw = game_state_get_global_crowns();
+  if (crw > 0) {
+    snprintf(header_buf, sizeof(header_buf), "COLOURS | CRW %lu", (unsigned long)crw);
   } else {
-    snprintf(header_buf, sizeof(header_buf), "TIER 2 (64 COLORS)");
+    snprintf(header_buf, sizeof(header_buf), "COLOURS (64)");
   }
   graphics_context_set_text_color(ctx, fg_color);
   graphics_draw_text(ctx, header_buf,
@@ -144,8 +140,12 @@ static void prv_draw_tier2_view(Layer *layer, GContext *ctx) {
           }
         }
 
-        graphics_context_set_stroke_color(ctx, is_dark ? GColorWhite : GColorBlack);
+        // Notifyer: Colored border highlighting the next unlock in the Colours grid
+        graphics_context_set_stroke_color(ctx, active_col);
         graphics_draw_rect(ctx, slot_rect);
+        GRect outer_notify_rect = GRect(slot_rect.origin.x - 1, slot_rect.origin.y - 1, slot_rect.size.w + 2, slot_rect.size.h + 2);
+        graphics_context_set_stroke_color(ctx, GColorYellow);
+        graphics_draw_rect(ctx, outer_notify_rect);
       } else {
         // Unfilled socket
         graphics_context_set_fill_color(ctx, empty_cell_bg);
@@ -158,7 +158,7 @@ static void prv_draw_tier2_view(Layer *layer, GContext *ctx) {
 
   // 6. Footer: Completed counter
   char stat_buf[32];
-  snprintf(stat_buf, sizeof(stat_buf), "%u/64 Colors Completed", (unsigned int)game->data.tier2_pixels);
+  snprintf(stat_buf, sizeof(stat_buf), "%u/64 Colours Completed", (unsigned int)game->data.tier2_pixels);
   graphics_context_set_text_color(ctx, fg_color);
   graphics_draw_text(ctx, stat_buf,
                      fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
@@ -169,9 +169,6 @@ static void prv_draw_tier2_view(Layer *layer, GContext *ctx) {
 
   // High-contrast 2-line button directions card
   int card_w = bounds.size.w - 12;
-#if defined(PBL_ROUND)
-  card_w = bounds.size.w - 38;
-#endif
   int card_h = 24;
   int card_x = (bounds.size.w - card_w) / 2;
   int card_y = 143;
@@ -184,12 +181,6 @@ static void prv_draw_tier2_view(Layer *layer, GContext *ctx) {
     line1_y = card_y + 3;
     line2_y = card_y + 17;
   }
-#if defined(PBL_ROUND)
-  card_h = 26;
-  card_y = 149;
-  line1_y = card_y + 1;
-  line2_y = card_y + 13;
-#endif
 
   GRect card_rect = GRect(card_x, card_y, card_w, card_h);
   graphics_context_set_fill_color(ctx, GColorBlack);
@@ -198,13 +189,13 @@ static void prv_draw_tier2_view(Layer *layer, GContext *ctx) {
   graphics_draw_rect(ctx, card_rect);
 
   graphics_context_set_text_color(ctx, GColorWhite);
-  graphics_draw_text(ctx, "v Zoom In (Tier 1)",
+  graphics_draw_text(ctx, "v Pixels",
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      GRect(card_x, line1_y, card_w, 13),
                      GTextOverflowModeWordWrap,
                      GTextAlignmentCenter,
                      NULL);
-  graphics_draw_text(ctx, "= Menu | ^ Hold for Clock",
+  graphics_draw_text(ctx, "> Menu | ^ Hold for Clock",
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      GRect(card_x, line2_y, card_w, 13),
                      GTextOverflowModeWordWrap,
@@ -232,9 +223,6 @@ static void prv_draw_zoom_transition(Layer *layer, GContext *ctx) {
   int t2_grid_w = (GRID_SIZE * t2_step) - t2_gap;
   int t2_grid_x = (bounds.size.w - t2_grid_w) / 2;
   int t2_grid_y = (bounds.size.w >= 200) ? 26 : 20;
-#if defined(PBL_ROUND)
-  t2_grid_y = 26;
-#endif
 
   // Tier 1 layout metrics
   int t1_cell_size = (bounds.size.w >= 200) ? 16 : 13;
@@ -248,9 +236,6 @@ static void prv_draw_zoom_transition(Layer *layer, GContext *ctx) {
   int t1_bar_x = (bounds.size.w - t1_content_w) / 2;
   int t1_grid_x = t1_bar_x + bar_w + bar_gap;
   int t1_grid_y = (bounds.size.w >= 200) ? 26 : 20;
-#if defined(PBL_ROUND)
-  t1_grid_y = 26;
-#endif
 
   // Target slot for active color in Tier 2
   uint8_t active_slot = game->data.tier2_pixels;
@@ -372,11 +357,6 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
     grid_y = 26;
     footer_y = 171;
   }
-#if defined(PBL_ROUND)
-  header_y = 6;
-  grid_y = 26;
-  footer_y = 138;
-#endif
 
   // 3. Liquid ink filling up the background like liquid during active boost
   if (game->current_boost_milli > 0) {
@@ -412,16 +392,13 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
     }
   }
 
-  // 4. Header: Active Color & Gold Pixels (or Completion notification)
-  bool in_preview_phase = (game_state_is_transition_active() && !game_state_is_transition_anim_running());
+  // 4. Header: Active Color & Crowns
   char header_buf[32];
-  if (in_preview_phase) {
-    snprintf(header_buf, sizeof(header_buf), "COLOR #%u COMPLETE!",
-             (unsigned int)(game_state_get_transition_completed_color() + 1));
-  } else if (game->data.gold_pixels > 0) {
-    snprintf(header_buf, sizeof(header_buf), "COL %u/64 | GP %lu",
+  uint32_t crw = game_state_get_global_crowns();
+  if (crw > 0) {
+    snprintf(header_buf, sizeof(header_buf), "COL %u/64 | CRW %lu",
              (unsigned int)(game->data.current_color_idx + 1),
-             (unsigned long)game->data.gold_pixels);
+             (unsigned long)crw);
   } else {
     snprintf(header_buf, sizeof(header_buf), "COL %u/64",
              (unsigned int)(game->data.current_color_idx + 1));
@@ -466,114 +443,79 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
   graphics_draw_rect(ctx, GRect(grid_x - 2, grid_y - 2, grid_w + 4, grid_h + 4));
 
   // 8. Render 8x8 Tier 1 Grid
-  uint32_t anim_ms = game_state_get_transition_anim_ms();
-  bool in_fuse_phase = (game_state_is_transition_active() && game_state_is_transition_anim_running() && anim_ms < 400);
+  uint32_t cur_pix = game->data.current_pixels;
+  GColor active_solid_color = game_state_get_active_solid_color();
+  uint32_t base_int = game_state_get_base_interval_ms();
 
-  if (in_fuse_phase) {
-    uint8_t fuse_color_idx = game_state_get_transition_completed_color();
-    GColor fuse_col = game_state_get_pixel_color(fuse_color_idx);
+  for (uint8_t row = 0; row < GRID_SIZE; row++) {
+    for (uint8_t col = 0; col < GRID_SIZE; col++) {
+      uint8_t seq_idx = game_state_get_order_index(row, col);
+      int x = grid_x + (col * step);
+      int y = grid_y + (row * step);
+      GRect cell_rect = GRect(x, y, cell_size, cell_size);
 
-    graphics_context_set_fill_color(ctx, fuse_col);
-    graphics_fill_rect(ctx, GRect(grid_x, grid_y, grid_w, grid_h), 2, GCornersAll);
-
-    graphics_context_set_stroke_color(ctx, GColorWhite);
-    graphics_draw_rect(ctx, GRect(grid_x - 1, grid_y - 1, grid_w + 2, grid_h + 2));
-    graphics_draw_rect(ctx, GRect(grid_x, grid_y, grid_w, grid_h));
-  } else if (in_preview_phase) {
-    uint8_t fuse_color_idx = game_state_get_transition_completed_color();
-    GColor fuse_col = game_state_get_pixel_color(fuse_color_idx);
-
-    for (uint8_t row = 0; row < GRID_SIZE; row++) {
-      for (uint8_t col = 0; col < GRID_SIZE; col++) {
-        int x = grid_x + (col * step);
-        int y = grid_y + (row * step);
-        GRect cell_rect = GRect(x, y, cell_size, cell_size);
-        graphics_context_set_fill_color(ctx, fuse_col);
+      if (seq_idx < cur_pix) {
+        graphics_context_set_fill_color(ctx, active_solid_color);
         graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
-      }
-    }
-    graphics_context_set_stroke_color(ctx, GColorWhite);
-    graphics_draw_rect(ctx, GRect(grid_x - 1, grid_y - 1, grid_w + 2, grid_h + 2));
-  } else {
-    uint32_t cur_pix = game->data.current_pixels;
-    GColor active_solid_color = game_state_get_active_solid_color();
-    uint32_t base_int = game_state_get_base_interval_ms();
+      } else if (seq_idx == cur_pix) {
+        graphics_context_set_fill_color(ctx, empty_cell_bg);
+        graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
 
-    for (uint8_t row = 0; row < GRID_SIZE; row++) {
-      for (uint8_t col = 0; col < GRID_SIZE; col++) {
-        uint8_t seq_idx = game_state_get_order_index(row, col);
-        int x = grid_x + (col * step);
-        int y = grid_y + (row * step);
-        GRect cell_rect = GRect(x, y, cell_size, cell_size);
+        int fill_h = (int)((game->data.progress_ms * (uint32_t)cell_size) / (base_int > 0 ? base_int : 1));
+        if (fill_h > cell_size) fill_h = cell_size;
 
-        if (seq_idx < cur_pix) {
+        if (fill_h > 0) {
+          GRect liquid_rect = GRect(x, y + cell_size - fill_h, cell_size, fill_h);
           graphics_context_set_fill_color(ctx, active_solid_color);
-          graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
-        } else if (seq_idx == cur_pix) {
-          graphics_context_set_fill_color(ctx, empty_cell_bg);
-          graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
-
-          int fill_h = (int)((game->data.progress_ms * (uint32_t)cell_size) / (base_int > 0 ? base_int : 1));
-          if (fill_h > cell_size) fill_h = cell_size;
-
-          if (fill_h > 0) {
-            GRect liquid_rect = GRect(x, y + cell_size - fill_h, cell_size, fill_h);
-            graphics_context_set_fill_color(ctx, active_solid_color);
-            graphics_fill_rect(ctx, liquid_rect, 0, GCornerNone);
-          }
-
-          graphics_context_set_stroke_color(ctx, active_cell_stroke);
-          graphics_draw_rect(ctx, cell_rect);
-        } else {
-          graphics_context_set_fill_color(ctx, empty_cell_bg);
-          graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
-          graphics_context_set_stroke_color(ctx, empty_cell_stroke);
-          graphics_draw_rect(ctx, cell_rect);
+          graphics_fill_rect(ctx, liquid_rect, 0, GCornerNone);
         }
+
+        graphics_context_set_stroke_color(ctx, active_cell_stroke);
+        graphics_draw_rect(ctx, cell_rect);
+      } else {
+        graphics_context_set_fill_color(ctx, empty_cell_bg);
+        graphics_fill_rect(ctx, cell_rect, 0, GCornerNone);
+        graphics_context_set_stroke_color(ctx, empty_cell_stroke);
+        graphics_draw_rect(ctx, cell_rect);
       }
     }
   }
 
   // 9. Footer: PPS & High-contrast 2-line button card
-  if (!in_preview_phase) {
-    uint32_t pps_whole = 0, pps_frac = 0;
-    game_state_get_pps(&pps_whole, &pps_frac);
+  uint32_t pps_whole = 0, pps_frac = 0;
+  game_state_get_pps(&pps_whole, &pps_frac);
 
-    char pps_buf[48];
-    if (game->current_boost_milli > 0) {
-      uint32_t boost_whole = 0, boost_tenths = 0;
-      game_state_get_current_boost_parts(&boost_whole, &boost_tenths);
-      snprintf(pps_buf, sizeof(pps_buf), "%lu.%02lu px/s [+%lu.%1lu%%]",
-               (unsigned long)pps_whole, (unsigned long)pps_frac,
-               (unsigned long)boost_whole, (unsigned long)boost_tenths);
-      GRect badge_rect = GRect((bounds.size.w - 140) / 2, footer_y, 140, 13);
-      graphics_context_set_fill_color(ctx, GColorOrange);
-      graphics_fill_rect(ctx, badge_rect, 2, GCornersAll);
-      graphics_context_set_text_color(ctx, GColorBlack);
-      graphics_draw_text(ctx, pps_buf,
-                         fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                         badge_rect,
-                         GTextOverflowModeWordWrap,
-                         GTextAlignmentCenter,
-                         NULL);
-    } else {
-      snprintf(pps_buf, sizeof(pps_buf), "%lu.%02lu px/s",
-               (unsigned long)pps_whole, (unsigned long)pps_frac);
-      graphics_context_set_text_color(ctx, fg_color);
-      graphics_draw_text(ctx, pps_buf,
-                         fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                         GRect(0, footer_y, bounds.size.w, 13),
-                         GTextOverflowModeWordWrap,
-                         GTextAlignmentCenter,
-                         NULL);
-    }
+  char pps_buf[48];
+  if (game->current_boost_milli > 0) {
+    uint32_t boost_whole = 0, boost_tenths = 0;
+    game_state_get_current_boost_parts(&boost_whole, &boost_tenths);
+    snprintf(pps_buf, sizeof(pps_buf), "%lu.%02lu px/s [+%lu.%1lu%%]",
+             (unsigned long)pps_whole, (unsigned long)pps_frac,
+             (unsigned long)boost_whole, (unsigned long)boost_tenths);
+    GRect badge_rect = GRect((bounds.size.w - 140) / 2, footer_y, 140, 13);
+    graphics_context_set_fill_color(ctx, GColorOrange);
+    graphics_fill_rect(ctx, badge_rect, 2, GCornersAll);
+    graphics_context_set_text_color(ctx, GColorBlack);
+    graphics_draw_text(ctx, pps_buf,
+                       fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       badge_rect,
+                       GTextOverflowModeWordWrap,
+                       GTextAlignmentCenter,
+                       NULL);
+  } else {
+    snprintf(pps_buf, sizeof(pps_buf), "%lu.%02lu px/s",
+             (unsigned long)pps_whole, (unsigned long)pps_frac);
+    graphics_context_set_text_color(ctx, fg_color);
+    graphics_draw_text(ctx, pps_buf,
+                       fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(0, footer_y, bounds.size.w, 13),
+                       GTextOverflowModeWordWrap,
+                       GTextAlignmentCenter,
+                       NULL);
   }
 
   // High-contrast 2-line button directions card (contrasts with background & boost ink)
   int card_w = bounds.size.w - 12;
-#if defined(PBL_ROUND)
-  card_w = bounds.size.w - 38;
-#endif
   int card_h = 24;
   int card_x = (bounds.size.w - card_w) / 2;
   int card_y = 143;
@@ -586,12 +528,6 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
     line1_y = card_y + 3;
     line2_y = card_y + 17;
   }
-#if defined(PBL_ROUND)
-  card_h = 26;
-  card_y = 149;
-  line1_y = card_y + 1;
-  line2_y = card_y + 13;
-#endif
 
   GRect card_rect = GRect(card_x, card_y, card_w, card_h);
   graphics_context_set_fill_color(ctx, GColorBlack);
@@ -600,179 +536,82 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
   graphics_draw_rect(ctx, card_rect);
 
   graphics_context_set_text_color(ctx, GColorWhite);
+  graphics_draw_text(ctx, "^ Colours (Hold: Clock)",
+                     fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                     GRect(card_x, line1_y, card_w, 13),
+                     GTextOverflowModeWordWrap,
+                     GTextAlignmentCenter,
+                     NULL);
+  graphics_draw_text(ctx, "> Menu | v Boost (Hold)",
+                     fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                     GRect(card_x, line2_y, card_w, 13),
+                     GTextOverflowModeWordWrap,
+                     GTextAlignmentCenter,
+                     NULL);
 
-  if (in_preview_phase) {
-    graphics_draw_text(ctx, "[Press Any Button]",
-                       fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(card_x, line1_y, card_w, 13),
-                       GTextOverflowModeWordWrap,
-                       GTextAlignmentCenter,
-                       NULL);
-    graphics_draw_text(ctx, "To Shrink into Tier 2",
-                       fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(card_x, line2_y, card_w, 13),
-                       GTextOverflowModeWordWrap,
-                       GTextAlignmentCenter,
-                       NULL);
-  } else {
-    graphics_draw_text(ctx, "^ Tier 2 (Hold: Clock)",
-                       fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(card_x, line1_y, card_w, 13),
-                       GTextOverflowModeWordWrap,
-                       GTextAlignmentCenter,
-                       NULL);
-    graphics_draw_text(ctx, "= Menu | v Hold for Boost",
-                       fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(card_x, line2_y, card_w, 13),
-                       GTextOverflowModeWordWrap,
-                       GTextAlignmentCenter,
-                       NULL);
-  }
-
-  // 10. Tier 2 Celebration Modal Popup (active when anim_ms >= 400ms during transition anim)
-  if (game_state_is_transition_active() && game_state_is_transition_anim_running() && anim_ms >= 400) {
-    int modal_w = bounds.size.w - 16;
-    int modal_h = bounds.size.h - 26;
-    int modal_x = 8;
-    int modal_y = 13;
-
-#if defined(PBL_ROUND)
-    modal_w = 144;
-    modal_h = 144;
-    modal_x = (bounds.size.w - modal_w) / 2;
-    modal_y = (bounds.size.h - modal_h) / 2;
-#endif
-
-    GRect modal_rect = GRect(modal_x, modal_y, modal_w, modal_h);
-
-    graphics_context_set_fill_color(ctx, GColorBlack);
-    graphics_fill_rect(ctx, modal_rect, 4, GCornersAll);
-    GColor modal_border_col = game->gold_pixel_just_earned ? GColorYellow : GColorWhite;
-    graphics_context_set_stroke_color(ctx, modal_border_col);
-    graphics_draw_rect(ctx, modal_rect);
-
-    if (game->gold_pixel_just_earned) {
-      graphics_context_set_text_color(ctx, GColorYellow);
-      graphics_draw_text(ctx, "GOLD PIXEL! +1",
-                         fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                         GRect(modal_x, modal_y + 4, modal_w, 20),
-                         GTextOverflowModeWordWrap,
-                         GTextAlignmentCenter,
-                         NULL);
-    } else {
-      graphics_context_set_text_color(ctx, GColorWhite);
-      graphics_draw_text(ctx, "TIER 2 EXPANSION",
-                         fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                         GRect(modal_x, modal_y + 4, modal_w, 20),
-                         GTextOverflowModeWordWrap,
-                         GTextAlignmentCenter,
-                         NULL);
-    }
-
-    int mini_cell = (bounds.size.w >= 200) ? 10 : 8;
-    int mini_step = mini_cell + 1;
-    int mini_grid_w = (GRID_SIZE * mini_step) - 1;
-    int mini_grid_x = modal_x + (modal_w - mini_grid_w) / 2;
-    int mini_grid_y = modal_y + ((bounds.size.w >= 200) ? 36 : 26);
-
-    uint8_t completed_color = game_state_get_transition_completed_color();
+  // 10. Meld & Grow-to-fill-screen Animation
+  if (game_state_is_meld_anim_running()) {
+    uint32_t anim_ms = game_state_get_meld_anim_ms();
+    uint8_t completed_color = game_state_get_meld_anim_color();
     GColor completed_col = game_state_get_pixel_color(completed_color);
 
-    int target_r = 0, target_c = 0;
-    for (uint8_t r = 0; r < GRID_SIZE; r++) {
-      for (uint8_t c = 0; c < GRID_SIZE; c++) {
-        if (game_state_get_order_index(r, c) == completed_color) {
-          target_r = r;
-          target_c = c;
-          break;
-        }
-      }
-    }
-    int target_x = mini_grid_x + (target_c * mini_step);
-    int target_y = mini_grid_y + (target_r * mini_step);
-    int target_w = mini_cell;
-    int target_h = mini_cell;
+    // Expand smoothly from the 8x8 grid rect to fill the entire screen
+    int expand_duration = 280;
+    int cur_ms = (anim_ms > (uint32_t)expand_duration) ? expand_duration : (int)anim_ms;
+    int progress = (cur_ms * 1000) / expand_duration; // 0 to 1000
+    int inv = 1000 - progress;
+    int ease = 1000 - (inv * inv) / 1000; // ease-out quad 0 to 1000
 
-    for (uint8_t r = 0; r < GRID_SIZE; r++) {
-      for (uint8_t c = 0; c < GRID_SIZE; c++) {
-        uint8_t slot_idx = game_state_get_order_index(r, c);
-        int sx = mini_grid_x + (c * mini_step);
-        int sy = mini_grid_y + (r * mini_step);
-        GRect slot_rect = GRect(sx, sy, mini_cell, mini_cell);
+    int target_x = -4;
+    int target_y = -4;
+    int target_w = bounds.size.w + 8;
+    int target_h = bounds.size.h + 8;
 
-        if (slot_idx < completed_color) {
-          GColor slot_col = game_state_get_pixel_color(slot_idx);
-          graphics_context_set_fill_color(ctx, slot_col);
-          graphics_fill_rect(ctx, slot_rect, 0, GCornerNone);
-        } else if (slot_idx == completed_color) {
-          if (anim_ms >= 1200) {
-            graphics_context_set_fill_color(ctx, completed_col);
-            graphics_fill_rect(ctx, slot_rect, 0, GCornerNone);
+    int cur_x = grid_x + ((target_x - grid_x) * ease) / 1000;
+    int cur_y = grid_y + ((target_y - grid_y) * ease) / 1000;
+    int cur_w = grid_w + ((target_w - grid_w) * ease) / 1000;
+    int cur_h = grid_h + ((target_h - grid_h) * ease) / 1000;
+    GRect meld_rect = GRect(cur_x, cur_y, cur_w, cur_h);
 
-            if (anim_ms < 1500 && ((anim_ms / 60) % 2 == 0)) {
-              graphics_context_set_stroke_color(ctx, GColorWhite);
-              graphics_draw_rect(ctx, GRect(sx - 1, sy - 1, mini_cell + 2, mini_cell + 2));
-            } else {
-              graphics_context_set_stroke_color(ctx, GColorWhite);
-              graphics_draw_rect(ctx, slot_rect);
-            }
-          } else {
-            graphics_context_set_fill_color(ctx, GColorBlack);
-            graphics_fill_rect(ctx, slot_rect, 0, GCornerNone);
-            graphics_context_set_stroke_color(ctx, GColorWhite);
-            graphics_draw_rect(ctx, slot_rect);
-          }
-        } else {
-          graphics_context_set_fill_color(ctx, GColorBlack);
-          graphics_fill_rect(ctx, slot_rect, 0, GCornerNone);
-          graphics_context_set_stroke_color(ctx, GColorDarkGray);
-          graphics_draw_rect(ctx, slot_rect);
-        }
-      }
-    }
+    GColor border_col = game->crown_just_earned ? GColorYellow : GColorWhite;
 
-    if (anim_ms < 1200) {
-      int t_ms = (int)(anim_ms - 400);
-      int duration = 800;
-      int ease_num = (t_ms * 2000 - ((t_ms * t_ms) / duration) * 1000) / duration;
-      if (ease_num < 0) ease_num = 0;
-      if (ease_num > 1000) ease_num = 1000;
-
-      int cur_x = grid_x + ((target_x - grid_x) * ease_num) / 1000;
-      int cur_y = grid_y + ((target_y - grid_y) * ease_num) / 1000;
-      int cur_w = grid_w + ((target_w - grid_w) * ease_num) / 1000;
-      int cur_h = grid_h + ((target_h - grid_h) * ease_num) / 1000;
-
-      GRect fly_rect = GRect(cur_x, cur_y, cur_w, cur_h);
+    if (anim_ms < 240) {
+      // Solid melded block growing outward across the screen
       graphics_context_set_fill_color(ctx, completed_col);
-      graphics_fill_rect(ctx, fly_rect, (cur_w > 16 ? 2 : 0), GCornersAll);
-      graphics_context_set_stroke_color(ctx, GColorWhite);
-      graphics_draw_rect(ctx, fly_rect);
-    }
+      graphics_fill_rect(ctx, meld_rect, (cur_w < bounds.size.w ? 2 : 0), GCornersAll);
 
-    char sub_buf[40];
-    if (game->gold_pixel_just_earned) {
-      snprintf(sub_buf, sizeof(sub_buf), "Total Gold: %lu", (unsigned long)game->data.gold_pixels);
-      graphics_context_set_text_color(ctx, GColorYellow);
+      graphics_context_set_stroke_color(ctx, border_col);
+      graphics_draw_rect(ctx, meld_rect);
+      if (cur_w < bounds.size.w) {
+        graphics_draw_rect(ctx, GRect(cur_x - 1, cur_y - 1, cur_w + 2, cur_h + 2));
+      }
+    } else if (anim_ms < 360) {
+      // 50% scanline dither fade as it fills the screen
+      graphics_context_set_stroke_color(ctx, completed_col);
+      int y_start = (meld_rect.origin.y < 0) ? 0 : meld_rect.origin.y;
+      int y_end = (meld_rect.origin.y + meld_rect.size.h > bounds.size.h) ? bounds.size.h : (meld_rect.origin.y + meld_rect.size.h);
+      int x_start = (meld_rect.origin.x < 0) ? 0 : meld_rect.origin.x;
+      int x_end = (meld_rect.origin.x + meld_rect.size.w > bounds.size.w) ? bounds.size.w : (meld_rect.origin.x + meld_rect.size.w);
+      for (int y = y_start; y < y_end; y += 2) {
+        graphics_draw_line(ctx, GPoint(x_start, y), GPoint(x_end, y));
+      }
+
+      graphics_context_set_stroke_color(ctx, border_col);
+      graphics_draw_rect(ctx, meld_rect);
     } else {
-      snprintf(sub_buf, sizeof(sub_buf), "Color #%u Complete!", (unsigned int)(completed_color + 1));
-      graphics_context_set_text_color(ctx, GColorWhite);
+      // 25% scanline fade quickly dissolving away
+      graphics_context_set_stroke_color(ctx, completed_col);
+      int y_start = (meld_rect.origin.y < 0) ? 0 : meld_rect.origin.y;
+      int y_end = (meld_rect.origin.y + meld_rect.size.h > bounds.size.h) ? bounds.size.h : (meld_rect.origin.y + meld_rect.size.h);
+      int x_start = (meld_rect.origin.x < 0) ? 0 : meld_rect.origin.x;
+      int x_end = (meld_rect.origin.x + meld_rect.size.w > bounds.size.w) ? bounds.size.w : (meld_rect.origin.x + meld_rect.size.w);
+      for (int y = y_start; y < y_end; y += 4) {
+        graphics_draw_line(ctx, GPoint(x_start, y), GPoint(x_end, y));
+      }
+
+      graphics_context_set_stroke_color(ctx, border_col);
+      graphics_draw_rect(ctx, meld_rect);
     }
-
-    graphics_draw_text(ctx, sub_buf,
-                       fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(modal_x, mini_grid_y + mini_grid_w + 3, modal_w, 16),
-                       GTextOverflowModeWordWrap,
-                       GTextAlignmentCenter,
-                       NULL);
-
-    graphics_context_set_text_color(ctx, GColorLightGray);
-    graphics_draw_text(ctx, game->gold_pixel_just_earned ? "Master Grid Completed!" : "Fusing into Tier 2...",
-                       fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(modal_x, mini_grid_y + mini_grid_w + 19, modal_w, 16),
-                       GTextOverflowModeWordWrap,
-                       GTextAlignmentCenter,
-                       NULL);
   }
 }
 

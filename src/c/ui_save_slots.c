@@ -1,5 +1,6 @@
 #include "ui_save_slots.h"
 #include "game_state.h"
+#include "Idle_Pixel.h"
 
 static Window *s_slots_window = NULL;
 static MenuLayer *s_slots_menu_layer = NULL;
@@ -28,13 +29,13 @@ static void prv_action_draw_row(GContext *ctx, const Layer *cell_layer, MenuInde
 
   switch (cell_index->row) {
     case 0:
-      menu_cell_basic_draw(ctx, cell_layer, "Load Slot", "Switch to this save", NULL);
+      menu_cell_basic_draw(ctx, cell_layer, "> Load Slot", "Switch to this save", NULL);
       break;
     case 1:
-      menu_cell_basic_draw(ctx, cell_layer, "Overwrite Slot", "Save current game over this slot", NULL);
+      menu_cell_basic_draw(ctx, cell_layer, "> Overwrite Slot", "Save current game over this slot", NULL);
       break;
     case 2:
-      menu_cell_basic_draw(ctx, cell_layer, "Clear Slot", "Delete this save file", NULL);
+      menu_cell_basic_draw(ctx, cell_layer, "> Clear Slot", "Delete this save file", NULL);
       break;
     default:
       break;
@@ -46,10 +47,9 @@ static void prv_action_select_callback(MenuLayer *menu_layer, MenuIndex *cell_in
   game_state_get_slot_info(s_selected_slot, &info);
 
   if (!info.is_used) {
-    game_state_save_to_slot(s_selected_slot);
+    game_state_start_new_run_in_slot(s_selected_slot);
     vibes_short_pulse();
-    window_stack_pop(true);
-    if (s_slots_menu_layer) menu_layer_reload_data(s_slots_menu_layer);
+    idle_pixel_pop_to_root();
     return;
   }
 
@@ -57,8 +57,7 @@ static void prv_action_select_callback(MenuLayer *menu_layer, MenuIndex *cell_in
     case 0: // Load
       game_state_switch_to_slot(s_selected_slot);
       vibes_short_pulse();
-      window_stack_pop(true); // Pop action window
-      window_stack_pop(true); // Pop slots window back to options
+      idle_pixel_pop_to_root();
       break;
     case 1: // Overwrite
       game_state_save_to_slot(s_selected_slot);
@@ -128,7 +127,7 @@ static void prv_slots_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex
 
   if (!info.is_used) {
     snprintf(title_buf, sizeof(title_buf), "Slot %u: [Empty]", (unsigned int)(slot_idx + 1));
-    snprintf(sub_buf, sizeof(sub_buf), "Tap to save game here");
+    snprintf(sub_buf, sizeof(sub_buf), "> Tap to start new run");
   } else {
     // Format date started
     struct tm *time_info = localtime(&info.date_started);
@@ -152,10 +151,13 @@ static void prv_slots_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex
     mins = mins % 60;
 
     if (info.is_completed) {
-      // Completed slot with crown symbol: 👑
-      snprintf(sub_buf, sizeof(sub_buf), "\xF0\x9F\x91\x91 Completed in %luh %lum", (unsigned long)hours, (unsigned long)mins);
+      if (info.crown_spent) {
+        snprintf(sub_buf, sizeof(sub_buf), "Crown Spent | %luh %lum", (unsigned long)hours, (unsigned long)mins);
+      } else {
+        snprintf(sub_buf, sizeof(sub_buf), "\xF0\x9F\x91\x91 Crown Ready | %luh %lum", (unsigned long)hours, (unsigned long)mins);
+      }
     } else {
-      snprintf(sub_buf, sizeof(sub_buf), "Time: %luh %lum | %u/64 Colors",
+      snprintf(sub_buf, sizeof(sub_buf), "Time: %luh %lum | %u/64 Colours",
                (unsigned long)hours, (unsigned long)mins, (unsigned int)info.tier2_pixels);
     }
   }
@@ -164,7 +166,18 @@ static void prv_slots_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex
 }
 
 static void prv_slots_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
-  prv_show_slot_action((uint8_t)cell_index->row);
+  uint8_t slot_idx = (uint8_t)cell_index->row;
+  SaveSlotInfo info;
+  game_state_get_slot_info(slot_idx, &info);
+
+  if (!info.is_used) {
+    game_state_start_new_run_in_slot(slot_idx);
+    vibes_short_pulse();
+    idle_pixel_pop_to_root();
+    return;
+  }
+
+  prv_show_slot_action(slot_idx);
 }
 
 static void prv_slots_window_load(Window *window) {

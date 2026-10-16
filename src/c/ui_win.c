@@ -66,6 +66,11 @@ static void prv_update_particles(GRect bounds) {
   }
 }
 
+#include "ui_save_slots.h"
+
+// -------------------------------------------------------------
+// Win Screen Update & Input
+// -------------------------------------------------------------
 static void prv_format_duration(uint32_t seconds, char *buf, size_t buf_size) {
   uint32_t mins = seconds / 60;
   uint32_t hours = mins / 60;
@@ -90,12 +95,6 @@ static void prv_win_update_proc(Layer *layer, GContext *ctx) {
   int card_h = bounds.size.h - 14;
   int card_x = 6;
   int card_y = 7;
-#if defined(PBL_ROUND)
-  card_w = 148;
-  card_h = 148;
-  card_x = (bounds.size.w - card_w) / 2;
-  card_y = (bounds.size.h - card_h) / 2;
-#endif
   GRect card_rect = GRect(card_x, card_y, card_w, card_h);
 
   graphics_context_set_fill_color(ctx, GColorBlack);
@@ -105,17 +104,17 @@ static void prv_win_update_proc(Layer *layer, GContext *ctx) {
 
   // Title with crown
   graphics_context_set_text_color(ctx, GColorYellow);
-  graphics_draw_text(ctx, "[*] IDLE 64 WON! [*]",
+  graphics_draw_text(ctx, "\xF0\x9F\x91\x91 CROWN WON! \xF0\x9F\x91\x91",
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(card_x, card_y + 4, card_w, 20),
+                     GRect(card_x, card_y + 2, card_w, 20),
                      GTextOverflowModeWordWrap,
                      GTextAlignmentCenter,
                      NULL);
 
   graphics_context_set_text_color(ctx, GColorWhite);
-  graphics_draw_text(ctx, "All 64 Colors Complete!",
+  graphics_draw_text(ctx, "All 64 Colours Complete!",
                      fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                     GRect(card_x, card_y + 24, card_w, 16),
+                     GRect(card_x, card_y + 20, card_w, 15),
                      GTextOverflowModeWordWrap,
                      GTextAlignmentCenter,
                      NULL);
@@ -136,24 +135,32 @@ static void prv_win_update_proc(Layer *layer, GContext *ctx) {
 
   char stats_buf[220];
   snprintf(stats_buf, sizeof(stats_buf),
-           "Total Time: %s\nIn-Game: %s\nAway: %s\nUnlocks: %lu/64\nEarned: %s | Spent: %s",
-           total_time_str, in_game_str, away_str,
+           "Time: %s (Away %s)\nCrowns: %lu | Unlocks: %lu\nEarned: %s | Spent: %s",
+           total_time_str, away_str,
+           (unsigned long)game_state_get_global_crowns(),
            (unsigned long)game_state_get_total_unlocks_count(),
            earned_str, spent_str);
 
   graphics_context_set_text_color(ctx, GColorLightGray);
   graphics_draw_text(ctx, stats_buf,
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     GRect(card_x + 8, card_y + 44, card_w - 16, card_h - 66),
+                     GRect(card_x + 8, card_y + 36, card_w - 16, card_h - 66),
                      GTextOverflowModeWordWrap,
                      GTextAlignmentLeft,
                      NULL);
 
-  // Dismiss prompt
+  // Dismiss prompts: Choice to keep going or start a new save
   graphics_context_set_text_color(ctx, GColorWhite);
-  graphics_draw_text(ctx, "[SELECT to Continue]",
+  graphics_draw_text(ctx, "> Keep Going",
                      fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                     GRect(card_x, card_y + card_h - 18, card_w, 16),
+                     GRect(card_x, card_y + card_h - 26, card_w, 13),
+                     GTextOverflowModeWordWrap,
+                     GTextAlignmentCenter,
+                     NULL);
+  graphics_context_set_text_color(ctx, GColorYellow);
+  graphics_draw_text(ctx, "v Start New Save",
+                     fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                     GRect(card_x, card_y + card_h - 14, card_w, 13),
                      GTextOverflowModeWordWrap,
                      GTextAlignmentCenter,
                      NULL);
@@ -177,17 +184,41 @@ static void prv_anim_timer_callback(void *context) {
   s_anim_timer = app_timer_register(33, prv_anim_timer_callback, NULL);
 }
 
-static void prv_dismiss_click_handler(ClickRecognizerRef recognizer, void *context) {
+static void prv_continue_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (s_win_window) {
     window_stack_pop(true);
   }
 }
 
+static void prv_new_save_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (s_win_window) {
+    window_stack_pop(false);
+  }
+  // Find first unused slot
+  uint8_t empty_slot = 0xFF;
+  for (uint8_t i = 0; i < NUM_SAVE_SLOTS; i++) {
+    SaveSlotInfo info;
+    game_state_get_slot_info(i, &info);
+    if (!info.is_used) {
+      empty_slot = i;
+      break;
+    }
+  }
+
+  if (empty_slot != 0xFF) {
+    game_state_start_new_run_in_slot(empty_slot);
+    vibes_short_pulse();
+  } else {
+    // If all slots are full, show save slots manager so user can choose
+    ui_save_slots_show();
+  }
+}
+
 static void prv_click_config_provider(void *context) {
-  window_single_click_subscribe(BUTTON_ID_SELECT, prv_dismiss_click_handler);
-  window_single_click_subscribe(BUTTON_ID_BACK, prv_dismiss_click_handler);
-  window_single_click_subscribe(BUTTON_ID_UP, prv_dismiss_click_handler);
-  window_single_click_subscribe(BUTTON_ID_DOWN, prv_dismiss_click_handler);
+  window_single_click_subscribe(BUTTON_ID_SELECT, prv_continue_click_handler);
+  window_single_click_subscribe(BUTTON_ID_BACK, prv_continue_click_handler);
+  window_single_click_subscribe(BUTTON_ID_UP, prv_continue_click_handler);
+  window_single_click_subscribe(BUTTON_ID_DOWN, prv_new_save_click_handler);
 }
 
 static void prv_window_load(Window *window) {

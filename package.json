@@ -11,8 +11,6 @@
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": [
-      "basalt",
-      "chalk",
       "emery"
     ],
     "watchapp": {

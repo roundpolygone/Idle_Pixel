@@ -181,8 +181,8 @@ static void prv_dev_header_update_proc(Layer *layer, GContext *ctx) {
   game_state_format_currency(game->data.currency, bal_buf, sizeof(bal_buf));
 
   char text_buf[48];
-  snprintf(text_buf, sizeof(text_buf), "DEV | %s | %lu Pts",
-           bal_buf, (unsigned long)game->data.unlock_points);
+  snprintf(text_buf, sizeof(text_buf), "DEV | %s | %luCRW",
+           bal_buf, (unsigned long)game_state_get_global_crowns());
 
   graphics_context_set_text_color(ctx, GColorWhite);
   graphics_draw_text(ctx, text_buf,
@@ -197,7 +197,7 @@ static void prv_dev_header_update_proc(Layer *layer, GContext *ctx) {
 }
 
 static uint16_t prv_dev_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
-  return 9;
+  return 10;
 }
 
 static void prv_dev_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -228,6 +228,9 @@ static void prv_dev_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *
       break;
     case 8:
       menu_cell_basic_draw(ctx, cell_layer, "Unlock All 13 BG Colors", "Instantly unlock palette", NULL);
+      break;
+    case 9:
+      menu_cell_basic_draw(ctx, cell_layer, "+ 1 Crown", "Award game completion (Crown)", NULL);
       break;
     default:
       break;
@@ -275,6 +278,10 @@ static void prv_dev_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index
       game_state_save();
       ticked = true;
       break;
+    case 9:
+      game_state_dev_add_crown();
+      ticked = true;
+      break;
     default:
       break;
   }
@@ -295,9 +302,6 @@ static void prv_dev_window_load(Window *window) {
   GRect bounds = layer_get_bounds(window_layer);
 
   int header_h = 24;
-#if defined(PBL_ROUND)
-  header_h = 32;
-#endif
 
   s_dev_header_layer = layer_create(GRect(0, 0, bounds.size.w, header_h));
   layer_set_update_proc(s_dev_header_layer, prv_dev_header_update_proc);

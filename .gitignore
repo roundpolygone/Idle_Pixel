@@ -8,11 +8,29 @@ build/
 *.o
 *.auto.c
 *.auto.h
+appinfo.json
 
-# Screenshots and scratch development data
+# Screenshots, dev logs, and media
 pebble_screenshot_*
-*.png
+*.webp
+*.csv
 dev_*
+.tempmediaStorage/
+.user_uploaded/
+
+# Node & Package Managers
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
 
 # Editor and IDE configurations
 .vscode/
@@ -20,6 +38,8 @@ dev_*
 *.swp
 *.swo
 *~
+*.patch
+*.diff
 
 # Operating system files
 .DS_Store

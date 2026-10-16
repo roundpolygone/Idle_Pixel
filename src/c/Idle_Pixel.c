@@ -1,4 +1,4 @@
-#include <pebble.h>
+#include "Idle_Pixel.h"
 #include "game_state.h"
 #include "ui_grid.h"
 #include "ui_menu.h"
@@ -11,9 +11,24 @@ static AppTimer *s_tick_timer = NULL;
 static bool s_down_held = false;
 static uint32_t s_down_hold_timer_ms = 0;
 
+Window* idle_pixel_get_main_window(void) {
+  return s_window;
+}
+
+void idle_pixel_pop_to_root(void) {
+  while (true) {
+    Window *top = window_stack_get_top_window();
+    if (!top || top == s_window) {
+      break;
+    }
+    window_stack_pop(false);
+  }
+  ui_grid_mark_dirty();
+}
+
 static void prv_timer_callback(void *data) {
   GameState *game = game_state_get();
-  uint32_t tick_interval = (game_state_is_transition_active() || ui_grid_is_zooming() || (game->current_boost_milli > 0)) ? 33 : TICK_INTERVAL_MS;
+  uint32_t tick_interval = (game_state_is_meld_anim_running() || ui_grid_is_zooming() || (game->current_boost_milli > 0)) ? 33 : TICK_INTERVAL_MS;
   bool pixel_added = false;
   bool fill_completed = false;
 
@@ -30,6 +45,16 @@ static void prv_timer_callback(void *data) {
     uint32_t hold_interval = game_state_get_hold_boost_interval_ms();
     while (s_down_hold_timer_ms >= hold_interval) {
       s_down_hold_timer_ms -= hold_interval;
+      game_state_activate_boost();
+    }
+  }
+
+  // Handle Crown Auto Boost (1 auto boost every 5s)
+  if (game->data.upgrade_auto_boost_lvl > 0) {
+    static uint32_t s_auto_boost_timer_ms = 0;
+    s_auto_boost_timer_ms += tick_interval;
+    if (s_auto_boost_timer_ms >= 5000) {
+      s_auto_boost_timer_ms = 0;
       game_state_activate_boost();
     }
   }
@@ -56,22 +81,7 @@ static void prv_timer_callback(void *data) {
   s_tick_timer = app_timer_register(tick_interval, prv_timer_callback, NULL);
 }
 
-static bool prv_handle_transition_click(void) {
-  if (!game_state_is_transition_active()) {
-    return false;
-  }
-  if (!game_state_is_transition_anim_running()) {
-    light_enable_interaction();
-    game_state_start_transition_anim();
-    ui_grid_mark_dirty();
-  }
-  return true;
-}
-
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
-  if (prv_handle_transition_click()) {
-    return;
-  }
   // Up button smoothly zooms out to Tier 2 grid
   if (game_state_get_view_mode() == VIEW_MODE_TIER1) {
     ui_grid_start_zoom_out();
@@ -79,24 +89,15 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void prv_up_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
-  if (prv_handle_transition_click()) {
-    return;
-  }
   // Hold UP for clock face
   ui_clock_show();
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
-  if (prv_handle_transition_click()) {
-    return;
-  }
   ui_menu_show();
 }
 
 static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context) {
-  if (prv_handle_transition_click()) {
-    return;
-  }
   // On Tier 2 screen, down zooms into Tier 1 grid
   if (game_state_get_view_mode() == VIEW_MODE_TIER2) {
     ui_grid_start_zoom_in();
@@ -108,9 +109,6 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context)
 }
 
 static void prv_down_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
-  if (prv_handle_transition_click()) {
-    return;
-  }
   if (game_state_get_view_mode() == VIEW_MODE_TIER2) {
     ui_grid_start_zoom_in();
     return;
@@ -127,9 +125,6 @@ static void prv_down_long_click_up_handler(ClickRecognizerRef recognizer, void *
 }
 
 static void prv_back_click_handler(ClickRecognizerRef recognizer, void *context) {
-  if (prv_handle_transition_click()) {
-    return;
-  }
   // On Tier 2 screen, back zooms into Tier 1 grid
   if (game_state_get_view_mode() == VIEW_MODE_TIER2) {
     ui_grid_start_zoom_in();
@@ -160,8 +155,17 @@ static void prv_window_unload(Window *window) {
   ui_grid_deinit();
 }
 
+static void prv_accel_tap_handler(AccelAxisType axis, int32_t direction) {
+  GameState *game = game_state_get();
+  if (game && game->data.option_tap_to_wake) {
+    light_enable_interaction();
+  }
+}
+
 static void prv_init(void) {
   game_state_init();
+
+  accel_tap_service_subscribe(prv_accel_tap_handler);
 
   s_window = window_create();
   window_set_background_color(s_window, GColorBlack);
@@ -181,6 +185,8 @@ static void prv_init(void) {
 }
 
 static void prv_deinit(void) {
+  accel_tap_service_unsubscribe();
+
   if (s_tick_timer) {
     app_timer_cancel(s_tick_timer);
     s_tick_timer = NULL;

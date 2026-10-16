@@ -1,6 +1,6 @@
 #include "ui_options.h"
 #include "game_state.h"
-#include "ui_save_slots.h"
+#include "Idle_Pixel.h"
 
 static Window *s_options_window = NULL;
 static MenuLayer *s_menu_layer = NULL;
@@ -33,7 +33,7 @@ static void prv_reset_content_update_proc(Layer *layer, GContext *ctx) {
 
   // Body
   graphics_context_set_text_color(ctx, GColorLightGray);
-  graphics_draw_text(ctx, "Warning:\nThis deletes ALL progress, currency, upgrades & unlocks!\n\n[SELECT] Confirm\n[BACK] Cancel",
+  graphics_draw_text(ctx, "Warning:\nThis deletes ALL progress, currency, saves & unlocks!\n\n> Confirm Reset\n[BACK] Cancel",
                      fonts_get_system_font(FONT_KEY_GOTHIC_18),
                      GRect(12, 42, bounds.size.w - 24, bounds.size.h - 50),
                      GTextOverflowModeWordWrap,
@@ -45,13 +45,8 @@ static void prv_reset_select_handler(ClickRecognizerRef recognizer, void *contex
   game_state_hard_reset();
   vibes_long_pulse();
 
-  // Close reset confirmation dialog and options menu back to root
-  if (s_reset_window) {
-    window_stack_pop(false);
-  }
-  if (s_options_window) {
-    window_stack_pop(true);
-  }
+  // Close all sub-windows back to root game screen
+  idle_pixel_pop_to_root();
 }
 
 static void prv_reset_click_config_provider(void *context) {
@@ -111,7 +106,8 @@ static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
                            game->data.option_vibration ? "ON" : "OFF", NULL);
       break;
     case 3:
-      menu_cell_basic_draw(ctx, cell_layer, "Save & Load Slots", "Manage enumerated saves", NULL);
+      menu_cell_basic_draw(ctx, cell_layer, "Tap to Wake",
+                           game->data.option_tap_to_wake ? "ON" : "OFF", NULL);
       break;
     case 4:
       menu_cell_basic_draw(ctx, cell_layer, "Reset Game", "Wipe all data & restart", NULL);
@@ -145,7 +141,10 @@ static void prv_menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_inde
       menu_layer_reload_data(menu_layer);
       break;
     case 3:
-      ui_save_slots_show();
+      game->data.option_tap_to_wake = !game->data.option_tap_to_wake;
+      game_state_save();
+      game_state_weak_vibe();
+      menu_layer_reload_data(menu_layer);
       break;
     case 4:
       prv_show_reset_confirmation();

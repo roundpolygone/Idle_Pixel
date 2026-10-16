@@ -1,21 +1,28 @@
 # Idle 64 (Idle_Pixel)
 
-An immersive, retro-inspired incremental idle game and clockface built in C for Pebble color smartwatches (**Pebble Time / basalt**, **Pebble Time Round / chalk**, and **Pebble Time 2 / emery**).
+An immersive, retro-inspired incremental idle game and clock face built in C for Pebble color smartwatches (**Pebble Time 2 / emery**).
+
+<p align="center">
+  <img src="Colour_grid.png" alt="Colours Master Grid" width="180" />
+  <img src="Clock_w_boost.png" alt="Clock Face with Boost Gauge" width="180" />
+  <img src="Modern_Clock.png" alt="Modern Minimalist Clock" width="180" />
+  <img src="Store.png" alt="Data-Driven Store" width="180" />
+</p>
 
 ---
 
 ## 🎮 Game Logic & Progression
 
-Idle 64 is structured into a multi-tiered incremental progression system:
+Idle 64 is structured into a multi-tiered incremental progression system: **Pixels**, **Colours**, and **Crowns**.
 
 ```
 +---+--------------------------+
-|   |  COL 1/64 | GP 0         |
+|   |  COL 1/64 | 👑 0         |
 |   +--------------------------+
 | 6 |                          |
 | 4 |  [■][■][■][■][■][■][■][■]|
 |   |  [■][■][■][■][■][■][■][■]|
-| S |  [■][■][■][▓][ ][ ][ ][ ]|  <-- Tier 1 Live Fill
+| S |  [■][■][■][▓][ ][ ][ ][ ]|  <-- Pixels (8x8 Live Canvas)
 | L |  [ ][ ][ ][ ][ ][ ][ ][ ]|
 | I |  [ ][ ][ ][ ][ ][ ][ ][ ]|
 | C |  [ ][ ][ ][ ][ ][ ][ ][ ]|
@@ -24,64 +31,69 @@ Idle 64 is structured into a multi-tiered incremental progression system:
 +---+--------------------------+
 |      3.64 px/s [+550.0%]     |
 +------------------------------+
-|   ^ Tier 2 (Hold: Clock)     |
-|   = Menu | v Hold for Boost  |
+|   ^ Colours (Hold: Clock)    |
+|   > Menu | v Boost (Hold)    |
 +------------------------------+
 ```
 
-### 1. Tier 1: Solid Color Canvas (8x8 Grid)
+### 1. Pixels (Tier 1: 8x8 Live Canvas)
 - **The Canvas**: An 8x8 grid (64 pixels) that fills with a single, solid color selected sequentially from the 64-color Pebble hardware palette.
-- **Base Speed**: Starts at 5.0 seconds per pixel (0.20 px/s), upgradeable in the Store and boostable with manual button presses or continuous hold auto-pressing.
-- **Completion Flow**: When the 64th pixel completes, the watch vibrates once and enters a completion preview showing the solid color canvas. On button press, the backlight illuminates and triggers the fuse-and-shrink animation into Tier 2. Tier 1 automatically begins filling the next color.
+- **Base Speed**: Starts at 10.0 seconds per pixel (0.10 px/s), upgradeable in the Store and boostable with manual clicks or continuous hold auto-pressing.
+- **Layer Earnings**: Each completed 8-pixel layer pays out Layer Bonus currency (`1¢ + 1¢/lvl`).
+- **Seamless Meld & Screen-Grow Animation**: When the 64th pixel completes, the 8x8 grid fuses into a solid block, expands across the screen, and evaporates via smooth scanline dithering into the background—with **zero delay** in starting the next colour underneath.
 
 ### 2. Vertical Progress Gauge (64 Slices)
-- Located directly to the left of the Tier 1 grid.
+- Located directly to the left of the active canvas.
 - Divided into 64 vertical slices building from bottom to top.
-- Each completed Tier 1 solid grid fills 1/64th of this gauge with its corresponding color.
+- Each completed 8x8 Colour grid fills 1/64th of this gauge with its corresponding color.
 
-### 3. Tier 2: The 64-Color Master Grid
-- Pressing **`UP`** from the main canvas zooms out to the Tier 2 view.
-- Displays all 64 color slots of the full palette:
-  - Completed colors appear as solid colored tiles.
-  - The currently filling color shows live filling progress matching the selected fill pattern.
+### 3. Colours (Tier 2: 64-Colour Master Grid)
+- Pressing **`UP`** from the active canvas zooms out to the Colours overview.
+- Displays all 64 color slots of the full Pebble palette:
+  - Completed colours appear as solid colored tiles.
+  - The currently filling colour shows live progress and active border highlights.
   - Future slots remain empty.
-- Pressing **`DOWN`** or **`BACK`** zooms back in to the Tier 1 canvas.
+- Pressing **`DOWN`** or **`BACK`** zooms smoothly back into the active canvas.
 
-### 4. Gold Pixels (`GP`) & Prestige
-- Completing all 64 solid color grids fills the Tier 2 master grid completely (4,096 total pixels).
-- Full completion awards **1 Gold Pixel point (`GP`)**, celebrated with a golden banner. Gold Pixels persist across prestiges.
-- **Prestiging**: Accessible via the Menu. Awards **1 cent per completed solid color grid** to spend on permanent upgrades, then restarts Tier 1 and Tier 2. Currency (converting to dollars at 100¢), upgrades, unlocks, and Gold Pixels are always preserved.
+### 4. Crowns (Tier 3: Winning & Global Prestige)
+- Completing all 64 Colours finishes the entire 64-colour palette (4,096 total pixels).
+- **Winning the Game**: Completing a save awards **1 Crown (`👑`)** to the persistent **Global Crown Bank**.
+- **Victory Celebration**: Filling all 64 colours triggers a 45-particle fireworks celebration over the victory card and lifetime stats (total time, in-game time, away time, unlocks, and earnings). Players can choose to keep going in endless mode or start a new run.
+- **Crown Perks**: Crowns can be spent in the Store from any save slot on universal perks that persist across all save files and new runs.
 
-### 5. Victory Celebration
-- Filling all 64 colors triggers the celebratory victory screen with animated colorful firework explosions over the victory card and comprehensive stats (total time, in-game time, away time, unlocks, and all-time earnings/spending).
+### 5. Prestige
+- Accessible from the Main Menu at any time after completing $\ge 1$ Colour.
+- **True Potential Payout**: Cash payout dynamically scales with your Layer Bonus upgrades:
+  $$\text{Payout} = \text{total\_completed\_layers} \times (1 + \text{upgrade\_layer\_cents\_lvl})$$
+- **Speed Multiplier**: Grants a permanent **+5% fill speed bonus per prestige level**.
+- Resets current Colours & Pixels while preserving all Crowns, currency, upgrades, and cosmetic unlocks.
 
 ---
 
-## 🎨 UI & Design
+## 🎨 UI & Aesthetics
 
-- **Liquid Wipe Animation**: Each pixel fills smoothly from bottom to top with an illuminated border according to the active fill pattern.
-- **Dynamic Auto-Contrasting Background**: By default (`Auto`), the background automatically switches between dark and light modes depending on the luminance of the currently filling color, ensuring optimal visibility.
-- **Liquid Ink Boost Visual**: Activating boost causes ink to rise from the bottom of the screen like a sloshing liquid. The ink color dynamically blends between the filling color and the background color.
-- **Fuse-and-Shrink Animation**: On completion, the 8x8 grid melds into one solid square block, then smoothly shrinks down and flies into its destination slot on the Tier 2 grid.
-- **Accurate Real-Time PPS**: Live pixels-per-second (`px/s`) telemetry calculated directly from current base speed and momentum boost multiplier.
+- **Liquid Wipe Animation**: Pixels fill smoothly with highlighted borders following the chosen fill order.
+- **Dynamic Auto-Contrasting Background**: By default (`Auto`), backgrounds dynamically adapt between dark and light modes depending on the active filling color's luminance.
+- **Liquid Ink Boost Visual**: Activating boost causes ink to rise from the bottom of the screen with live sloshing physics.
+- **Real-Time Telemetry**: Live pixels-per-second (`px/s`) telemetry calculated directly from current base speed, prestige bonus, and momentum multiplier.
 
 ---
 
 ## 🕹️ Controls & Navigation
 
-### Main Screen (Tier 1 Canvas)
+### Main Screen (Active Canvas)
 | Button | Action | Description |
 | :--- | :--- | :--- |
-| **`UP`** | **Zoom Out** | Open the Tier 2 overview. |
-| **`UP (Hold)`** | **Clock Face** | Open the built-in clock face view. |
-| **`SELECT`** | **Menu** | Open the main menu (Prestige, Store, Unlocks, Options, Clock). |
+| **`UP`** | **Zoom Out** | Open the 64-Colour overview. |
+| **`UP (Hold)`** | **Clock Face** | Open the clock face view. |
+| **`SELECT`** | **Menu** | Open the main menu. |
 | **`DOWN`** | **Boost** | Add filling momentum (+5% base gain, compounds with repeat presses). |
 | **`DOWN (Hold)`** | **Auto-Boost** | Rapid auto-press boost at your purchased hold boost rate. |
 
-### Upper Tier Screen (Tier 2 Grid)
+### Colours Screen (64-Colour Grid)
 | Button | Action | Description |
 | :--- | :--- | :--- |
-| **`DOWN` / `BACK`** | **Zoom In** | Return to the Tier 1 filling canvas. |
+| **`DOWN` / `BACK`** | **Zoom In** | Return to the active filling canvas. |
 | **`SELECT`** | **Menu** | Open the main menu. |
 | **`UP (Hold)`** | **Clock Face** | Open the clock face view. |
 
@@ -90,52 +102,58 @@ Idle 64 is structured into a multi-tiered incremental progression system:
 | :--- | :--- | :--- |
 | **`UP`** | **Cycle BG Color** | Cycle through all unlocked background colors and Auto Contrast. |
 | **`SELECT`** | **Cycle Style** | Cycle through unlocked clock styles on the fly. |
-| **`DOWN` (Press/Hold)**| **Boost** | Add filling boost with live liquid wave animation behind the clock face. |
+| **`DOWN` (Press/Hold)**| **Boost** | Boost filling with live liquid wave animation behind the clock face. |
 | **`BACK`** | **Exit Clock** | Return to the game canvas. |
 
-*Note: While on the clock face, game progression calculates continuously without preview interruptions or idle caps.*
+*Note: While on the clock face, game progression rolls over continuously without preview confirmation pauses or idle caps.*
 
 ---
 
-## 🌟 Features & Menus
+## 🌟 Menus & Systems
 
-### 🛒 Store (Prestige Upgrades)
-Spend prestige currency (cents/dollars) on upgrades with exponential cost scaling:
-1. **Auto-Fill Speed**: Accelerates baseline fill interval.
-2. **Boost Amount**: Increases momentum gained per button press.
-3. **Boost Acceleration**: Increases how fast momentum reaches peak.
-4. **Boost Sustain Duration**: Extends the time peak boost holds before decaying.
-5. **Boost Diminish Rate**: Slows down the rate at which momentum decays.
-6. **Boost Max Limit**: Raises the maximum momentum capacity (screen ceiling).
-7. **Hold Press Boost**: Increases auto-click rate when holding down the boost button (+10% clicks/sec/level).
-8. **Max Idle Time**: Increases offline idle accumulation limit (+15 min/level).
+### Main Menu
+1. **Prestige**: Reset Colours & Pixels for upgraded cash payout and permanent +5% speed.
+2. **Store**: 13 data-driven store upgrades and crown perks.
+3. **Unlocks**: Unlockable background colors, fill orders, fonts, font sizes, and clock styles.
+4. **Clock**: Full-screen interactive clock face.
+5. **Options**: Global watch settings and preferences.
+6. **Save Slots**: Multi-slot save file management.
+7. *(Dev Menu)*: Ticker for quick debugging (if enabled).
 
-### 🎨 Cosmetic Unlocks
-Spend unlock points earned from all-time grid milestones:
-- **Background Colors**: 13 curated colorways + Auto Contrast mode with live preview swatches.
-- **Fill Orders**: Normal, Reverse, CW Spiral, CCW Spiral, Zig-Zag, Up and Down, Checkerboard, and Random.
-- **Fonts**: Gothic, Bitham, Leco, and Roboto.
-- **Clock Styles**: Big Digital, Square Analogue, Bold Minimalist Analogue, 7-Segment Digital, Word Clock, and "Now" Clock.
+### 🛒 Store Upgrades
+All upgrades feature declarative cost scaling and live stat formatters:
 
-### ⚙️ Options ("Format & Saves")
-- **Time Format**: Toggle 12-Hour vs 24-Hour time.
-- **Seconds**: Toggle seconds display across digital clocks (in-line `:SS` / 7-segment digits) and analogue clocks (sweeping second hand). Automatically switches tick subscription to minute units when off for battery efficiency.
-- **Vibration**: Toggle haptic feedback on completion and milestones.
-- **Save & Load Slots**: 3 enumerated save slots showing creation date, play duration, and crown completion badge. Includes Load, Overwrite, and Clear actions.
-- **Reset Game**: Protected confirmation dialog to wipe save data and restart.
+#### Standard Cents Upgrades (2.0x Cost Curve)
+1. **Auto-Fill Speed (+10%)**: Baseline interval compound reduction.
+2. **Boost Amount (+5%)**: Momentum added per click.
+3. **Boost Acceleration (+10%/s)**: Rate at which boost climbs to peak.
+4. **Boost Sustain Duration (+500ms)**: Peak hold duration before decay.
+5. **Boost Diminish Rate (-20%)**: Slower momentum decay rate.
+6. **Boost Max Limit (+25%)**: Calibrated between +100% (2.0x) and +300% (4.0x).
+7. **Hold Auto-Press (+10%)**: Base 1.0 click/s up to rapid fire.
+8. **Max Idle Time (+50%)**: Formula B compound scaling starting at **1 minute** up to a 24-hour ceiling at Level 17 (1m, 2m, 3m, 5m, 7m, 11m, 17m, 25m, 38m, 57m, 1h26m, 2h10m, 3h14m, 4h52m, 7h18m, 10h57m, 16h25m, 24h).
+9. **Away Idle Speed (+15%)**: Closed-game speed starting at 5% base up to 100% efficiency.
+10. **Layer Bonus (+1¢/row)**: Adds +1¢ per completed 8-pixel layer.
 
-### 🕒 Offline Idle Catch-Up
-- Automatically calculates progress when returning to the app after 3+ minutes away (up to the purchased offline cap).
-- Displays a summary dialog detailing time away, time credited, pixels gained, and fills completed.
+#### Crown Perks (Persistent Across All Saves — 1 Crown Each)
+11. **👑 Auto Boost**: Fires 1 auto boost every 5 seconds (Max Level 1).
+12. **👑 Clock Boost (+20%)**: +20% boost momentum while on the clock face per level.
+13. **👑 Starting Headstart**: +$0.50 starting bankroll for new runs in any save slot per level.
 
----
+### 🎨 Cosmetic Unlocks (30 Total Items)
+Spend unlock points earned from completing colours:
+- **Background Colors (13)**: Curated Pebble palette colorways with live preview swatches + default Auto Contrast.
+- **Fill Orders (7)**: Normal (default), Reverse, CW Spiral, CCW Spiral, Zig-Zag, Up and Down, Checkerboard, and Random.
+- **Fonts (3)**: Gothic (default), Bitham, Leco, and Roboto.
+- **Font Sizes (2)**: Small (default), Medium, Large.
+- **Clock Styles (5)**: Big Digital (default), Classic Analogue, Bold Minimalist, 7-Segment, Word Clock, and "Now" Clock.
 
-## 💻 Developer Configuration
+*Unlocks continue progressing while the game is closed. Winning a run automatically guarantees enough unlock points to unlock every cosmetic item in the game.*
 
-To toggle the in-game developer menu (currency and unlock point tickers):
-- Open `src/c/game_state.h`
-- Set `#define ENABLE_DEV_MENU 1` for local development and testing.
-- Set `#define ENABLE_DEV_MENU 0` for release builds to cleanly exclude the developer menu and minimize binary footprint.
+### 💾 Save Slots & Global Persistence
+- **3 Enumerated Slots**: Displays start date, total play duration, and completion badges (`👑 Completed`). Includes **Load Slot**, **Overwrite Slot**, and **Clear Slot** actions.
+- **Safe Switching**: Loading saves uses `idle_pixel_pop_to_root()` to dismiss menus without exiting to the Pebble OS launcher.
+- **Global Settings**: Options (`Time Format`, `Seconds`, `Vibration`, `Tap to Wake`) and the **Crown Bank** are stored globally under `PERSIST_KEY_GLOBAL_CONFIG`, ensuring preferences and crown upgrades never reset when switching saves.
 
 ---
 
@@ -147,15 +165,13 @@ To toggle the in-game developer menu (currency and unlock point tickers):
 
 ### Commands
 ```bash
-# Build the .pbw package for basalt, chalk, and emery
+# Build the .pbw package for Pebble Time 2 (Emery)
 pebble build
 
 # Run in Pebble emulator
-pebble install --emulator basalt
-pebble install --emulator chalk
 pebble install --emulator emery
 
-# Install to a physical watch via CloudPebble / phone proxy
+# Install to physical watch via CloudPebble / phone proxy
 pebble install --cloudpebble
 pebble install --phone <PHONE_IP_ADDRESS>
 ```

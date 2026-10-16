@@ -21,19 +21,24 @@ static void prv_content_update_proc(Layer *layer, GContext *ctx) {
                      NULL);
 
   // Info details
-  char info_buf[140];
+  char info_buf[160];
   uint32_t solid_grids = game->data.solid_grids_count;
 
   if (solid_grids == 0) {
+    char pot_str[24];
+    uint32_t one_colour = 8 * (1 + game->data.upgrade_layer_cents_lvl);
+    game_state_format_currency(one_colour, pot_str, sizeof(pot_str));
     snprintf(info_buf, sizeof(info_buf),
-             "Solid Grids: 0\nNeed >= 1 filled solid grid (1¢) to prestige.\n\n[BACK to return]");
+             "Colours: 0\nPotential: %s / Colour\nNeed >= 1 Colour to prestige.\n\n< Back",
+             pot_str);
     graphics_context_set_text_color(ctx, GColorLightGray);
   } else {
-    char gain_str[24];
-    game_state_format_currency(solid_grids, gain_str, sizeof(gain_str));
+    char pot_str[24];
+    uint32_t payout = game_state_get_prestige_payout();
+    game_state_format_currency(payout, pot_str, sizeof(pot_str));
     snprintf(info_buf, sizeof(info_buf),
-             "Solid Grids: %lu\nGain: %s\n\nResets solid grids!\n(Keeps Gold Pixels)\n\n[SELECT] Confirm\n[BACK] Cancel",
-             (unsigned long)solid_grids, gain_str);
+             "Colours: %lu\nPotential: %s | +5%% Spd\n\nResets Colours & Pixels\n(Keeps Crowns & Upgrades)\n\n> Confirm\n< Back",
+             (unsigned long)solid_grids, pot_str);
     graphics_context_set_text_color(ctx, GColorWhite);
   }
 
