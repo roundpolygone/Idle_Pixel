@@ -138,7 +138,7 @@ All upgrades feature declarative cost scaling, live stat formatters, and marquee
 11. **👑 Auto Boost**: Fires 1 auto boost on an interval. Purchasable 5 times, taking 1 second off the interval each level (5s down to 1s at Level 5).
 12. **👑 Clock Boost (+20%)**: +20% boost momentum while on the clock face per level.
 13. **👑 Starting Headstart**: +$0.50 starting bankroll for new runs in any save slot per level.
-14. **👑 Start Level**: Starts each cash upgrade item at +1 level each purchase after prestiging and on new saves.
+14. **👑 Start Level**: Adds +1 extra level to all standard store upgrade items across all saves and on new saves per level.
 
 ### 🎨 Cosmetic Unlocks (36 Total Items)
 Spend unlock points earned from completing colours:

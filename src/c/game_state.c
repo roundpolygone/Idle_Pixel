@@ -58,6 +58,24 @@ static void prv_save_global_config(void) {
   persist_write_int(PERSIST_KEY_GLOBAL_CROWNS, (int32_t)s_global_data.crowns);
 }
 
+static void prv_add_start_level_bonus(uint8_t count) {
+  if (count == 0) return;
+  s_game.data.upgrade_fill_speed_lvl += count;
+  s_game.data.upgrade_boost_amount_lvl += count;
+  s_game.data.upgrade_boost_accel_lvl += count;
+  s_game.data.upgrade_boost_sustain_lvl += count;
+  s_game.data.upgrade_boost_diminish_lvl += count;
+  s_game.data.upgrade_boost_limit_lvl += count;
+  s_game.data.upgrade_offline_cap_lvl += count;
+  s_game.data.upgrade_hold_boost_lvl += count;
+  s_game.data.upgrade_layer_cents_lvl += count;
+  if (s_game.data.upgrade_offline_speed_lvl + count <= 7) {
+    s_game.data.upgrade_offline_speed_lvl += count;
+  } else {
+    s_game.data.upgrade_offline_speed_lvl = 7;
+  }
+}
+
 static void prv_apply_global_config_to_session(void) {
   s_game.data.option_24h = s_global_data.option_24h;
   s_game.data.option_show_seconds = s_global_data.option_show_seconds;
@@ -66,6 +84,10 @@ static void prv_apply_global_config_to_session(void) {
   s_game.data.upgrade_auto_boost_lvl = s_global_data.upgrade_auto_boost_lvl;
   s_game.data.upgrade_clock_boost_lvl = s_global_data.upgrade_clock_boost_lvl;
   s_game.data.upgrade_headstart_lvl = s_global_data.upgrade_headstart_lvl;
+  if (s_global_data.upgrade_start_level_lvl > s_game.data.upgrade_start_level_lvl) {
+    uint8_t diff = s_global_data.upgrade_start_level_lvl - s_game.data.upgrade_start_level_lvl;
+    prv_add_start_level_bonus(diff);
+  }
   s_game.data.upgrade_start_level_lvl = s_global_data.upgrade_start_level_lvl;
   s_game.data.crowns = s_global_data.crowns;
 }
@@ -389,7 +411,7 @@ static void prv_fmt_stat_headstart(char *buf, size_t buf_size) {
 
 static void prv_fmt_stat_start_level(char *buf, size_t buf_size) {
   uint8_t lvl = s_global_data.upgrade_start_level_lvl;
-  snprintf(buf, buf_size, "+%u Lvl at Start", (unsigned int)lvl);
+  snprintf(buf, buf_size, "+%u Extra Lvl", (unsigned int)lvl);
 }
 
 typedef void (*UpgradeFormatStatFunc)(char *buf, size_t buf_size);
@@ -579,7 +601,7 @@ bool game_state_buy_upgrade(UpgradeId id) {
         *lvl_ptr = s_global_data.upgrade_headstart_lvl;
       } else if (id == UPGRADE_START_LEVEL) {
         s_global_data.upgrade_start_level_lvl++;
-        *lvl_ptr = s_global_data.upgrade_start_level_lvl;
+        prv_apply_global_config_to_session();
       } else {
         (*lvl_ptr)++;
       }
@@ -1361,19 +1383,6 @@ uint32_t game_state_prestige(void) {
   s_game.transition_anim_ms = 0;
   s_game.gold_pixel_just_earned = false;
   s_game.preview_background_pixels = 0;
-
-  // Reset standard purchase items to +1 level per Start Level crown upgrade
-  uint8_t start_lvl = s_global_data.upgrade_start_level_lvl;
-  s_game.data.upgrade_fill_speed_lvl = start_lvl;
-  s_game.data.upgrade_boost_amount_lvl = start_lvl;
-  s_game.data.upgrade_boost_accel_lvl = start_lvl;
-  s_game.data.upgrade_boost_sustain_lvl = start_lvl;
-  s_game.data.upgrade_boost_diminish_lvl = start_lvl;
-  s_game.data.upgrade_boost_limit_lvl = start_lvl;
-  s_game.data.upgrade_offline_cap_lvl = (start_lvl > 5) ? 5 : start_lvl;
-  s_game.data.upgrade_hold_boost_lvl = start_lvl;
-  s_game.data.upgrade_offline_speed_lvl = (start_lvl > 7) ? 7 : start_lvl;
-  s_game.data.upgrade_layer_cents_lvl = start_lvl;
 
   prv_apply_global_config_to_session();
   prv_shuffle_random_order();
