@@ -20,7 +20,19 @@
       "dummy"
     ],
     "resources": {
-      "media": []
+      "media": [
+        {
+          "type": "bitmap",
+          "name": "IMAGE_APP_LIST",
+          "file": "App_List.png",
+          "menuIcon": true
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_APP_48",
+          "file": "App_48.png"
+        }
+      ]
     }
   }
 }
