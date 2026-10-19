@@ -15,6 +15,12 @@ static uint32_t s_zoom_anim_ms = 0;
 
 void ui_grid_start_zoom_out(void) {
   if (s_zoom_state != ZOOM_STATE_NONE) return;
+  if (game_state_get_power_saving()) {
+    game_state_set_view_mode(VIEW_MODE_TIER2);
+    s_zoom_state = ZOOM_STATE_NONE;
+    ui_grid_mark_dirty();
+    return;
+  }
   s_zoom_state = ZOOM_STATE_OUT;
   s_zoom_anim_ms = 0;
   ui_grid_mark_dirty();
@@ -22,6 +28,12 @@ void ui_grid_start_zoom_out(void) {
 
 void ui_grid_start_zoom_in(void) {
   if (s_zoom_state != ZOOM_STATE_NONE) return;
+  if (game_state_get_power_saving()) {
+    game_state_set_view_mode(VIEW_MODE_TIER1);
+    s_zoom_state = ZOOM_STATE_NONE;
+    ui_grid_mark_dirty();
+    return;
+  }
   s_zoom_state = ZOOM_STATE_IN;
   s_zoom_anim_ms = 0;
   ui_grid_mark_dirty();
@@ -358,37 +370,51 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
     footer_y = 171;
   }
 
-  // 3. Liquid ink filling up the background like liquid during active boost
+  // 3. Liquid ink filling up the background during active boost
   if (game->current_boost_milli > 0) {
     GColor ink_color = game_state_get_ink_color();
-    static uint16_t s_ink_wave_phase = 0;
-    s_ink_wave_phase += 1400;
-
     uint32_t max_limit_milli = game_state_get_boost_max_limit_percent() * 1000;
     if (max_limit_milli == 0) max_limit_milli = 100000;
 
-    int liquid_h = (int)(((int32_t)bounds.size.h * (int32_t)game->current_boost_milli) / (int32_t)max_limit_milli);
-    if (liquid_h > bounds.size.h) liquid_h = bounds.size.h;
-    if (liquid_h < 4) liquid_h = 4;
-
-    int surface_y = bounds.size.h - liquid_h;
-    int solid_fill_y = surface_y + 4;
-
-    graphics_context_set_stroke_color(ctx, ink_color);
-    for (int x = 0; x < bounds.size.w; x++) {
-      int32_t angle = (x * 1100) + s_ink_wave_phase;
-      int wave_offset = (sin_lookup(angle) * 3) / TRIG_MAX_RATIO;
-      int y_top = surface_y + wave_offset;
-      if (y_top < 0) y_top = 0;
-      if (y_top < bounds.size.h) {
-        int y_bottom = (solid_fill_y < bounds.size.h) ? solid_fill_y : bounds.size.h;
-        graphics_draw_line(ctx, GPoint(x, y_top), GPoint(x, y_bottom));
-      }
-    }
-
-    if (solid_fill_y < bounds.size.h) {
+    if (game_state_is_boost_at_max()) {
+      // At max boost, ink reaches completely off the top of the screen (solid fill, 0 wave updates)
       graphics_context_set_fill_color(ctx, ink_color);
-      graphics_fill_rect(ctx, GRect(0, solid_fill_y, bounds.size.w, bounds.size.h - solid_fill_y), 0, GCornerNone);
+      graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+    } else if (game_state_get_power_saving()) {
+      // In power saving mode, draw flat ink level without sinusoidal wave calculations
+      int liquid_h = (int)(((int32_t)bounds.size.h * (int32_t)game->current_boost_milli) / (int32_t)max_limit_milli);
+      if (liquid_h > bounds.size.h) liquid_h = bounds.size.h;
+      if (liquid_h < 2) liquid_h = 2;
+      int surface_y = bounds.size.h - liquid_h;
+      graphics_context_set_fill_color(ctx, ink_color);
+      graphics_fill_rect(ctx, GRect(0, surface_y, bounds.size.w, bounds.size.h - surface_y), 0, GCornerNone);
+    } else {
+      static uint16_t s_ink_wave_phase = 0;
+      s_ink_wave_phase += 1400;
+
+      int liquid_h = (int)(((int32_t)bounds.size.h * (int32_t)game->current_boost_milli) / (int32_t)max_limit_milli);
+      if (liquid_h > bounds.size.h) liquid_h = bounds.size.h;
+      if (liquid_h < 4) liquid_h = 4;
+
+      int surface_y = bounds.size.h - liquid_h;
+      int solid_fill_y = surface_y + 4;
+
+      graphics_context_set_stroke_color(ctx, ink_color);
+      for (int x = 0; x < bounds.size.w; x++) {
+        int32_t angle = (x * 1100) + s_ink_wave_phase;
+        int wave_offset = (sin_lookup(angle) * 3) / TRIG_MAX_RATIO;
+        int y_top = surface_y + wave_offset;
+        if (y_top < 0) y_top = 0;
+        if (y_top < bounds.size.h) {
+          int y_bottom = (solid_fill_y < bounds.size.h) ? solid_fill_y : bounds.size.h;
+          graphics_draw_line(ctx, GPoint(x, y_top), GPoint(x, y_bottom));
+        }
+      }
+
+      if (solid_fill_y < bounds.size.h) {
+        graphics_context_set_fill_color(ctx, ink_color);
+        graphics_fill_rect(ctx, GRect(0, solid_fill_y, bounds.size.w, bounds.size.h - solid_fill_y), 0, GCornerNone);
+      }
     }
   }
 

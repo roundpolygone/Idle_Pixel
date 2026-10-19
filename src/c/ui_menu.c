@@ -123,6 +123,10 @@ void ui_menu_cell_basic_draw(GContext *ctx, const Layer *cell_layer, const char 
 static void prv_marquee_timer_callback(void *data) {
   MenuNavConfig *cfg = (MenuNavConfig*)data;
   if (!cfg || !cfg->window || !cfg->menu_layer) return;
+  if (game_state_get_power_saving()) {
+    cfg->marquee_timer = NULL;
+    return;
+  }
   if (!window_stack_contains_window(cfg->window)) {
     cfg->marquee_timer = NULL;
     return;
@@ -257,8 +261,11 @@ void ui_menu_bind_navigation(Window *window, MenuLayer *menu_layer, MenuNavConfi
 
   if (cfg->marquee_timer) {
     app_timer_cancel(cfg->marquee_timer);
+    cfg->marquee_timer = NULL;
   }
-  cfg->marquee_timer = app_timer_register(MARQUEE_TICK_MS, prv_marquee_timer_callback, cfg);
+  if (!game_state_get_power_saving()) {
+    cfg->marquee_timer = app_timer_register(MARQUEE_TICK_MS, prv_marquee_timer_callback, cfg);
+  }
 }
 
 // =============================================================
@@ -502,7 +509,7 @@ static void prv_show_reset_confirmation(void) {
 // 4. Options Submenu
 // =============================================================
 static uint16_t prv_options_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
-  return 4;
+  return 5;
 }
 
 static void prv_options_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -522,6 +529,10 @@ static void prv_options_draw_row(GContext *ctx, const Layer *cell_layer, MenuInd
                               game->data.option_vibration ? "ON" : "OFF", NULL);
       break;
     case 3:
+      ui_menu_cell_basic_draw(ctx, cell_layer, "Power Saving",
+                              game->data.option_power_saving ? "ON" : "OFF", NULL);
+      break;
+    case 4:
       ui_menu_cell_basic_draw(ctx, cell_layer, "Reset Game", "Wipe all data & restart", NULL);
       break;
     default:
@@ -554,6 +565,11 @@ static void prv_options_select_callback(MenuLayer *menu_layer, MenuIndex *cell_i
       menu_layer_reload_data(menu_layer);
       break;
     case 3:
+      game_state_set_power_saving(!game_state_get_power_saving());
+      game_state_weak_vibe();
+      menu_layer_reload_data(menu_layer);
+      break;
+    case 4:
       prv_show_reset_confirmation();
       break;
     default:
@@ -562,7 +578,7 @@ static void prv_options_select_callback(MenuLayer *menu_layer, MenuIndex *cell_i
 }
 
 static uint16_t prv_options_get_row_count(void) {
-  return 4;
+  return 5;
 }
 
 static void prv_options_window_load(Window *window) {

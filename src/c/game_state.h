@@ -15,7 +15,7 @@
 #define ENABLE_DEV_MENU 0
 #endif
 
-#define SAVE_VERSION 12
+#define SAVE_VERSION 14
 #define NUM_SAVE_SLOTS 64
 #define PERSIST_KEY_GLOBAL_CONFIG 96
 #define PERSIST_KEY_GLOBAL_CROWNS 98
@@ -37,6 +37,7 @@ typedef struct __attribute__((__packed__)) {
   uint8_t  upgrade_clock_boost_lvl; // Crown item: +20% boost on clock per level
   uint8_t  upgrade_headstart_lvl;   // Crown item: +50¢ starting cash & speed
   uint8_t  upgrade_start_level_lvl; // Crown item: starts each upgrade at +1 lvl after prestige
+  bool     option_power_saving;     // power saving mode (added at end to preserve offsets)
 } GlobalAppData;
 
 // Unlockable cosmetics: 19 background colors, 7 fill orders, 3 fonts, 3 font sizes, 5 clock styles (36 total unlocks)
@@ -133,6 +134,7 @@ typedef struct __attribute__((__packed__)) {
   bool     is_completed;           // Game won flag
   bool     is_used;                // Slot used flag
   uint64_t favourite_colors;       // 64-bit mask for favourite colors
+  bool     option_power_saving;    // power saving mode (added at end to preserve offsets)
 } GameSaveData;
 
 #define gold_pixels crowns
@@ -235,6 +237,8 @@ uint32_t game_state_get_boost_diminish_tenths_per_sec(void);
 uint32_t game_state_get_boost_max_limit_percent(void);
 uint32_t game_state_get_current_boost_percent(void);
 void game_state_get_current_boost_parts(uint32_t *out_whole, uint32_t *out_tenths);
+bool game_state_is_boost_at_max(void);
+bool game_state_is_boost_animating(void);
 uint32_t game_state_get_max_offline_sec(void);
 bool game_state_is_offline_unlocked(void);
 
@@ -278,6 +282,7 @@ typedef enum {
   COST_CURVE_1_5X = 0,
   COST_CURVE_2X,
   COST_CURVE_CROWN_FLAT,
+  COST_CURVE_CROWN_PROGRESSIVE,
 } CostCurveType;
 
 typedef enum {
@@ -358,6 +363,8 @@ void game_state_vibe_short(void);
 void game_state_vibe_double(void);
 void game_state_vibe_long(void);
 bool game_state_is_vibration_enabled(void);
+bool game_state_get_power_saving(void);
+void game_state_set_power_saving(bool enabled);
 void game_state_cycle_bg_color(void);
 
 // New layer bonus upgrade
@@ -368,7 +375,9 @@ bool game_state_buy_layer_bonus(void);
 // Crown store purchases & management
 uint32_t game_state_get_available_crowns(void);
 uint32_t game_state_get_total_crowns_earned(void);
+uint32_t game_state_get_total_crowns_spent(void);
 bool game_state_spend_crown(void);
+bool game_state_spend_crowns(uint32_t count);
 uint32_t game_state_get_auto_boost_cost_crowns(void);
 uint32_t game_state_get_auto_boost_interval_ms(void);
 bool game_state_buy_auto_boost(void);

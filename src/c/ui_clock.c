@@ -540,34 +540,48 @@ static void prv_clock_update_proc(Layer *layer, GContext *ctx) {
   // Boost liquid ink wave animation behind the clock
   if (game->current_boost_milli > 0) {
     GColor ink_color = game_state_get_ink_color();
-    static uint16_t s_clock_wave_phase = 0;
-    s_clock_wave_phase += 1400;
-
     uint32_t max_limit_milli = game_state_get_boost_max_limit_percent() * 1000;
     if (max_limit_milli == 0) max_limit_milli = 100000;
 
-    int liquid_h = (int)(((int32_t)bounds.size.h * (int32_t)game->current_boost_milli) / (int32_t)max_limit_milli);
-    if (liquid_h > bounds.size.h) liquid_h = bounds.size.h;
-    if (liquid_h < 4) liquid_h = 4;
-
-    int surface_y = bounds.size.h - liquid_h;
-    int solid_fill_y = surface_y + 4;
-
-    graphics_context_set_stroke_color(ctx, ink_color);
-    for (int x = 0; x < bounds.size.w; x++) {
-      int32_t angle = (x * 1100) + s_clock_wave_phase;
-      int wave_offset = (sin_lookup(angle) * 3) / TRIG_MAX_RATIO;
-      int y_top = surface_y + wave_offset;
-      if (y_top < 0) y_top = 0;
-      if (y_top < bounds.size.h) {
-        int y_bottom = (solid_fill_y < bounds.size.h) ? solid_fill_y : bounds.size.h;
-        graphics_draw_line(ctx, GPoint(x, y_top), GPoint(x, y_bottom));
-      }
-    }
-
-    if (solid_fill_y < bounds.size.h) {
+    if (game_state_is_boost_at_max()) {
+      // At max boost, ink reaches completely off the top of the screen (solid fill, 0 wave updates)
       graphics_context_set_fill_color(ctx, ink_color);
-      graphics_fill_rect(ctx, GRect(0, solid_fill_y, bounds.size.w, bounds.size.h - solid_fill_y), 0, GCornerNone);
+      graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+    } else if (game_state_get_power_saving()) {
+      // In power saving mode, draw flat ink level without sinusoidal wave calculations
+      int liquid_h = (int)(((int32_t)bounds.size.h * (int32_t)game->current_boost_milli) / (int32_t)max_limit_milli);
+      if (liquid_h > bounds.size.h) liquid_h = bounds.size.h;
+      if (liquid_h < 2) liquid_h = 2;
+      int surface_y = bounds.size.h - liquid_h;
+      graphics_context_set_fill_color(ctx, ink_color);
+      graphics_fill_rect(ctx, GRect(0, surface_y, bounds.size.w, bounds.size.h - surface_y), 0, GCornerNone);
+    } else {
+      static uint16_t s_clock_wave_phase = 0;
+      s_clock_wave_phase += 1400;
+
+      int liquid_h = (int)(((int32_t)bounds.size.h * (int32_t)game->current_boost_milli) / (int32_t)max_limit_milli);
+      if (liquid_h > bounds.size.h) liquid_h = bounds.size.h;
+      if (liquid_h < 4) liquid_h = 4;
+
+      int surface_y = bounds.size.h - liquid_h;
+      int solid_fill_y = surface_y + 4;
+
+      graphics_context_set_stroke_color(ctx, ink_color);
+      for (int x = 0; x < bounds.size.w; x++) {
+        int32_t angle = (x * 1100) + s_clock_wave_phase;
+        int wave_offset = (sin_lookup(angle) * 3) / TRIG_MAX_RATIO;
+        int y_top = surface_y + wave_offset;
+        if (y_top < 0) y_top = 0;
+        if (y_top < bounds.size.h) {
+          int y_bottom = (solid_fill_y < bounds.size.h) ? solid_fill_y : bounds.size.h;
+          graphics_draw_line(ctx, GPoint(x, y_top), GPoint(x, y_bottom));
+        }
+      }
+
+      if (solid_fill_y < bounds.size.h) {
+        graphics_context_set_fill_color(ctx, ink_color);
+        graphics_fill_rect(ctx, GRect(0, solid_fill_y, bounds.size.w, bounds.size.h - solid_fill_y), 0, GCornerNone);
+      }
     }
   }
 

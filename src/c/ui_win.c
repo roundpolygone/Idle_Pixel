@@ -183,7 +183,8 @@ static void prv_anim_timer_callback(void *context) {
     prv_update_particles(bounds);
     layer_mark_dirty(s_win_layer);
   }
-  s_anim_timer = app_timer_register(33, prv_anim_timer_callback, NULL);
+  uint32_t interval = game_state_get_power_saving() ? 1000 : 33;
+  s_anim_timer = app_timer_register(interval, prv_anim_timer_callback, NULL);
 }
 
 static void prv_continue_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -238,7 +239,8 @@ static void prv_window_load(Window *window) {
     prv_spawn_burst(bounds.size.w / 2, bounds.size.h / 3, 0, 20);
   }
 
-  s_anim_timer = app_timer_register(33, prv_anim_timer_callback, NULL);
+  uint32_t interval = game_state_get_power_saving() ? 1000 : 33;
+  s_anim_timer = app_timer_register(interval, prv_anim_timer_callback, NULL);
   game_state_vibe_double();
 }
 

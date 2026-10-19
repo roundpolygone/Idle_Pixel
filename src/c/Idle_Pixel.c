@@ -23,8 +23,18 @@ void idle_pixel_pop_to_root(void) {
 }
 
 static void prv_timer_callback(void *data) {
-  GameState *game = game_state_get();
-  uint32_t tick_interval = (game_state_is_meld_anim_running() || ui_grid_is_zooming() || (game->current_boost_milli > 0)) ? 33 : TICK_INTERVAL_MS;
+  bool power_saving = game_state_get_power_saving();
+  bool anim_active = game_state_is_meld_anim_running() || ui_grid_is_zooming() || game_state_is_boost_animating();
+
+  uint32_t tick_interval;
+  if (power_saving) {
+    tick_interval = 1000; // In power saving mode, frame rate is throttled to 1 fps
+  } else if (anim_active) {
+    tick_interval = 33;   // ~30 fps for active animations
+  } else {
+    tick_interval = TICK_INTERVAL_MS; // 100ms (10 Hz)
+  }
+
   bool pixel_added = false;
   bool fill_completed = false;
 
@@ -68,7 +78,8 @@ static void prv_timer_callback(void *data) {
   }
 
   if (game_state_is_clock_active()) {
-    if (game->current_boost_milli > 0) {
+    // Only mark clock dirty when boost is actively animating (not perpetual when at max)
+    if (game_state_is_boost_animating()) {
       ui_clock_mark_dirty();
     }
   } else {
@@ -176,7 +187,8 @@ static void prv_init(void) {
   const bool animated = true;
   window_stack_push(s_window, animated);
 
-  s_tick_timer = app_timer_register(TICK_INTERVAL_MS, prv_timer_callback, NULL);
+  uint32_t init_interval = game_state_get_power_saving() ? 1000 : TICK_INTERVAL_MS;
+  s_tick_timer = app_timer_register(init_interval, prv_timer_callback, NULL);
 }
 
 static void prv_deinit(void) {

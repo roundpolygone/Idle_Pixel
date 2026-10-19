@@ -52,6 +52,7 @@ void game_state_format_currency(uint32_t cents, char *buf, size_t buf_size) {
 }
 
 static GlobalAppData s_global_data;
+static uint32_t prv_get_slot_key(uint8_t slot_idx);
 
 static void prv_save_global_config(void) {
   persist_write_data(PERSIST_KEY_GLOBAL_CONFIG, &s_global_data, sizeof(GlobalAppData));
@@ -81,6 +82,7 @@ static void prv_apply_global_config_to_session(void) {
   s_game.data.option_show_seconds = s_global_data.option_show_seconds;
   s_game.data.option_vibration = s_global_data.option_vibration;
   s_game.data.option_tap_to_wake = s_global_data.option_tap_to_wake;
+  s_game.data.option_power_saving = s_global_data.option_power_saving;
   s_game.data.upgrade_auto_boost_lvl = s_global_data.upgrade_auto_boost_lvl;
   s_game.data.upgrade_clock_boost_lvl = s_global_data.upgrade_clock_boost_lvl;
   s_game.data.upgrade_headstart_lvl = s_global_data.upgrade_headstart_lvl;
@@ -100,8 +102,14 @@ static void prv_award_crowns(uint32_t count) {
   s_game.win_just_triggered = true;
 
   // Award crowns directly to the global crown bank whenever a game wins
-  s_global_data.crowns += count;
   s_global_data.total_crowns_earned += count;
+  uint32_t spent = game_state_get_total_crowns_spent();
+  if (s_global_data.total_crowns_earned >= spent) {
+    s_global_data.crowns = s_global_data.total_crowns_earned - spent;
+  } else {
+    s_global_data.total_crowns_earned = spent;
+    s_global_data.crowns = 0;
+  }
   prv_save_global_config();
   s_game.data.crowns = s_global_data.crowns;
 
@@ -161,13 +169,13 @@ uint32_t game_state_get_boost_sustain_ms(void) {
 }
 
 static const uint32_t s_boost_diminish_table[16] = {
-  100, 80, 64, 51, 41, 33, 26, 21, 17, 13, 11, 9, 7, 5, 4, 4
+  200, 180, 160, 142, 126, 112, 100, 88, 78, 68, 59, 51, 44, 38, 32, 25
 };
 
 uint32_t game_state_get_boost_diminish_tenths_per_sec(void) {
   uint8_t lvl = s_game.data.upgrade_boost_diminish_lvl;
   if (lvl < 16) return s_boost_diminish_table[lvl];
-  return 4; // minimum floor 0.4%/s
+  return 25; // minimum floor 2.5%/s
 }
 
 static const uint32_t s_boost_max_limit_table[16] = {
@@ -191,6 +199,22 @@ void game_state_get_current_boost_parts(uint32_t *out_whole, uint32_t *out_tenth
   if (out_tenths) {
     *out_tenths = (s_game.current_boost_milli % 1000) / 100;
   }
+}
+
+bool game_state_is_boost_at_max(void) {
+  uint32_t max_milli = game_state_get_boost_max_limit_percent() * 1000;
+  if (max_milli == 0) max_milli = 100000;
+  return (s_game.current_boost_milli >= max_milli);
+}
+
+bool game_state_is_boost_animating(void) {
+  if (s_game.current_boost_milli == 0) return false;
+  uint32_t max_milli = game_state_get_boost_max_limit_percent() * 1000;
+  if (max_milli == 0) max_milli = 100000;
+  if (s_game.current_boost_milli >= max_milli && s_game.target_boost_milli >= max_milli) {
+    return false;
+  }
+  return true;
 }
 
 bool game_state_is_offline_unlocked(void) {
@@ -262,14 +286,71 @@ uint32_t game_state_get_total_crowns_earned(void) {
   return s_global_data.total_crowns_earned;
 }
 
-bool game_state_spend_crown(void) {
-  if (s_global_data.crowns > 0) {
-    s_global_data.crowns--;
+uint32_t game_state_get_total_crowns_spent(void) {
+  uint32_t start_lvl = s_global_data.upgrade_start_level_lvl;
+  uint32_t start_lvl_crowns = (start_lvl * (start_lvl + 1)) / 2;
+  return (uint32_t)s_global_data.upgrade_auto_boost_lvl +
+         (uint32_t)s_global_data.upgrade_clock_boost_lvl +
+         (uint32_t)s_global_data.upgrade_headstart_lvl +
+         start_lvl_crowns;
+}
+
+static void prv_sanitize_crowns(void) {
+  uint32_t spent = game_state_get_total_crowns_spent();
+
+  // Count legitimate completed runs across all save slots
+  uint32_t completed_slots = 0;
+  for (uint8_t i = 0; i < NUM_SAVE_SLOTS; i++) {
+    uint32_t k = prv_get_slot_key(i);
+    if (persist_exists(k)) {
+      GameSaveData d;
+      int bytes = persist_read_data(k, &d, sizeof(GameSaveData));
+      if (bytes > 0 && d.is_completed) {
+        completed_slots++;
+      }
+    }
+  }
+
+  // Detect corrupted crowns (e.g. thousands from struct alignment bug or underflow)
+  // or mathematical inconsistency where available crowns exceeds total crowns earned
+  bool corrupted = (s_global_data.crowns > 100 ||
+                    s_global_data.total_crowns_earned > 100 ||
+                    s_global_data.total_crowns_earned < spent ||
+                    s_global_data.crowns > s_global_data.total_crowns_earned);
+
+  if (corrupted) {
+    uint32_t legitimate_earned = (completed_slots > spent) ? completed_slots : spent;
+    s_global_data.total_crowns_earned = legitimate_earned;
+    s_global_data.crowns = legitimate_earned - spent;
+    prv_save_global_config();
+  } else {
+    // Enforce invariant: available crowns == total_crowns_earned - spent
+    if (s_global_data.total_crowns_earned >= spent) {
+      s_global_data.crowns = s_global_data.total_crowns_earned - spent;
+    } else {
+      s_global_data.total_crowns_earned = spent;
+      s_global_data.crowns = 0;
+    }
+    prv_save_global_config();
+  }
+
+  s_game.data.crowns = s_global_data.crowns;
+}
+
+bool game_state_spend_crowns(uint32_t count) {
+  if (count == 0) return true;
+  uint32_t spent = game_state_get_total_crowns_spent();
+  if (s_global_data.crowns >= count && s_global_data.total_crowns_earned >= spent + count) {
+    s_global_data.crowns -= count;
     prv_save_global_config();
     s_game.data.crowns = s_global_data.crowns;
     return true;
   }
   return false;
+}
+
+bool game_state_spend_crown(void) {
+  return game_state_spend_crowns(1);
 }
 
 void game_state_get_pps(uint32_t *out_whole, uint32_t *out_hundredths) {
@@ -419,7 +500,9 @@ static void prv_fmt_stat_clock_boost(char *buf, size_t buf_size) {
 
 static void prv_fmt_stat_headstart(char *buf, size_t buf_size) {
   uint32_t bonus_cents = (uint32_t)game_state_get_upgrade_level(UPGRADE_STARTING_HEADSTART) * 50;
-  snprintf(buf, buf_size, "+%lu¢ Start", (unsigned long)bonus_cents);
+  char cur_str[24];
+  game_state_format_currency(bonus_cents, cur_str, sizeof(cur_str));
+  snprintf(buf, buf_size, "+%s Start", cur_str);
 }
 
 static void prv_fmt_stat_start_level(char *buf, size_t buf_size) {
@@ -472,7 +555,7 @@ static const UpgradeDef s_upgrades[UPGRADE_COUNT] = {
     .format_stat = prv_fmt_stat_boost_sustain
   },
   [UPGRADE_BOOST_DIMINISH] = {
-    .title = "Boost Diminish (-20%)",
+    .title = "Boost Diminish",
     .level_offset = offsetof(GameSaveData, upgrade_boost_diminish_lvl),
     .curve_type = COST_CURVE_2X,
     .currency_type = CURRENCY_TYPE_CENTS,
@@ -546,9 +629,9 @@ static const UpgradeDef s_upgrades[UPGRADE_COUNT] = {
   [UPGRADE_START_LEVEL] = {
     .title = "👑 Start Level",
     .level_offset = offsetof(GameSaveData, upgrade_start_level_lvl),
-    .curve_type = COST_CURVE_CROWN_FLAT,
+    .curve_type = COST_CURVE_CROWN_PROGRESSIVE,
     .currency_type = CURRENCY_TYPE_CROWNS,
-    .max_level = 0,
+    .max_level = 5,
     .format_stat = prv_fmt_stat_start_level
   }
 };
@@ -575,6 +658,8 @@ uint32_t game_state_get_upgrade_cost(UpgradeId id) {
       return game_state_calc_cost_2x(lvl);
     case COST_CURVE_CROWN_FLAT:
       return 1;
+    case COST_CURVE_CROWN_PROGRESSIVE:
+      return (uint32_t)lvl + 1;
     default:
       return 0;
   }
@@ -602,7 +687,8 @@ bool game_state_buy_upgrade(UpgradeId id) {
   uint8_t *lvl_ptr = (uint8_t*)(((uint8_t*)&s_game.data) + def->level_offset);
 
   if (def->currency_type == CURRENCY_TYPE_CROWNS) {
-    if (game_state_spend_crown()) {
+    uint32_t cost = game_state_get_upgrade_cost(id);
+    if (game_state_spend_crowns(cost)) {
       if (id == UPGRADE_AUTO_BOOST) {
         s_global_data.upgrade_auto_boost_lvl++;
         *lvl_ptr = s_global_data.upgrade_auto_boost_lvl;
@@ -657,7 +743,12 @@ void game_state_format_upgrade_sub(UpgradeId id, char *buf, size_t buf_size) {
   if (game_state_is_upgrade_maxed(id)) {
     snprintf(buf, buf_size, "Lvl %d (%s) | MAX", lvl, stat_buf);
   } else if (def->currency_type == CURRENCY_TYPE_CROWNS) {
-    snprintf(buf, buf_size, "Lvl %d (%s) | 1 Crown", lvl, stat_buf);
+    uint32_t cost = game_state_get_upgrade_cost(id);
+    if (cost == 1) {
+      snprintf(buf, buf_size, "Lvl %d (%s) | 1 Crown", lvl, stat_buf);
+    } else {
+      snprintf(buf, buf_size, "Lvl %d (%s) | %lu Crowns", lvl, stat_buf, (unsigned long)cost);
+    }
   } else {
     char cost_str[24];
     uint32_t cost = game_state_get_upgrade_cost(id);
@@ -770,6 +861,7 @@ static void prv_init_default_save_data(void) {
   s_game.data.option_24h = s_global_data.option_24h;
   s_game.data.option_show_seconds = s_global_data.option_show_seconds;
   s_game.data.option_tap_to_wake = s_global_data.option_tap_to_wake;
+  s_game.data.option_power_saving = s_global_data.option_power_saving;
   s_game.data.last_save_time = time(NULL);
   s_game.data.date_started = time(NULL);
   s_game.data.active_play_sec = 0;
@@ -880,6 +972,7 @@ void game_state_init(void) {
   prv_shuffle_random_order();
 
   if (persist_exists(PERSIST_KEY_GLOBAL_CONFIG)) {
+    memset(&s_global_data, 0, sizeof(GlobalAppData));
     persist_read_data(PERSIST_KEY_GLOBAL_CONFIG, &s_global_data, sizeof(GlobalAppData));
   } else {
     memset(&s_global_data, 0, sizeof(GlobalAppData));
@@ -888,6 +981,7 @@ void game_state_init(void) {
     s_global_data.option_show_seconds = true;
     s_global_data.option_vibration = true;
     s_global_data.option_tap_to_wake = true;
+    s_global_data.option_power_saving = false;
     if (persist_exists(PERSIST_KEY_GLOBAL_CROWNS)) {
       s_global_data.crowns = (uint32_t)persist_read_int(PERSIST_KEY_GLOBAL_CROWNS);
       s_global_data.total_crowns_earned = s_global_data.crowns;
@@ -925,6 +1019,27 @@ void game_state_init(void) {
     prv_save_global_config();
   }
 
+  // Migrate older saves to current version and sanitize save times
+  for (uint8_t i = 0; i < NUM_SAVE_SLOTS; i++) {
+    uint32_t k = prv_get_slot_key(i);
+    if (persist_exists(k)) {
+      GameSaveData d;
+      int bytes = persist_read_data(k, &d, sizeof(GameSaveData));
+      if (bytes > 0 && d.version < SAVE_VERSION && d.version >= 5) {
+        d.version = SAVE_VERSION;
+        d.option_power_saving = s_global_data.option_power_saving;
+        time_t now = time(NULL);
+        if (d.last_save_time <= 0 || d.last_save_time > now) {
+          d.last_save_time = now;
+        }
+        persist_write_data(k, &d, sizeof(GameSaveData));
+      }
+    }
+  }
+
+  // Sanitize crowns to ensure no negative numbers and exact match with earned and spent
+  prv_sanitize_crowns();
+
   uint8_t active_slot = 0;
   if (persist_exists(PERSIST_KEY_ACTIVE_SLOT)) {
     active_slot = (uint8_t)persist_read_int(PERSIST_KEY_ACTIVE_SLOT);
@@ -942,7 +1057,12 @@ void game_state_init(void) {
     } else if (bytes_read > 0 && s_game.data.version < SAVE_VERSION && s_game.data.version >= 5) {
       s_game.data.version = SAVE_VERSION;
       s_game.data.option_tap_to_wake = true;
+      s_game.data.option_power_saving = s_global_data.option_power_saving;
       if (s_game.data.unlocked_font_sizes == 0) s_game.data.unlocked_font_sizes = 1;
+      time_t now = time(NULL);
+      if (s_game.data.last_save_time <= 0 || s_game.data.last_save_time > now) {
+        s_game.data.last_save_time = now;
+      }
       loaded = true;
       persist_write_data(active_key, &s_game.data, sizeof(GameSaveData));
     }
@@ -1037,6 +1157,7 @@ void game_state_init(void) {
       s_game.data.offline_play_sec += credited_sec;
 
       // Check win condition and award crowns
+      if (completions > 10) completions = 10;
       if (completions > 0) {
         prv_award_crowns(completions);
       }
@@ -1091,6 +1212,7 @@ void game_state_save(void) {
   s_global_data.option_show_seconds = s_game.data.option_show_seconds;
   s_global_data.option_vibration = s_game.data.option_vibration;
   s_global_data.option_tap_to_wake = s_game.data.option_tap_to_wake;
+  s_global_data.option_power_saving = s_game.data.option_power_saving;
   if (s_game.data.upgrade_auto_boost_lvl > s_global_data.upgrade_auto_boost_lvl) {
     s_global_data.upgrade_auto_boost_lvl = s_game.data.upgrade_auto_boost_lvl;
   }
@@ -1132,6 +1254,7 @@ void game_state_hard_reset(void) {
   s_global_data.option_show_seconds = true;
   s_global_data.option_vibration = true;
   s_global_data.option_tap_to_wake = true;
+  s_global_data.option_power_saving = false;
   prv_save_global_config();
 
   // Automatically start a save in the first slot
@@ -1269,11 +1392,17 @@ void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_compl
 
   // Advance meld & grow-to-fill screen animation if active
   if (s_game.meld_anim_running) {
-    s_game.meld_anim_ms += dt_ms;
-    if (s_game.meld_anim_ms >= 480) {
+    if (s_game.data.option_power_saving) {
       s_game.meld_anim_running = false;
       s_game.meld_anim_ms = 0;
       s_game.crown_just_earned = false;
+    } else {
+      s_game.meld_anim_ms += dt_ms;
+      if (s_game.meld_anim_ms >= 480) {
+        s_game.meld_anim_running = false;
+        s_game.meld_anim_ms = 0;
+        s_game.crown_just_earned = false;
+      }
     }
   }
 
@@ -1351,10 +1480,10 @@ void game_state_tick(uint32_t dt_ms, bool *out_pixel_added, bool *out_fill_compl
         prv_award_crowns(1);
       }
 
-      // Start meld and grow animation on the pixel grid with completed color
+      // Start meld and grow animation on the pixel grid with completed color (skipped in power saving)
       s_game.meld_anim_color = s_game.data.current_color_idx;
       s_game.meld_anim_ms = 0;
-      s_game.meld_anim_running = true;
+      s_game.meld_anim_running = !s_game.data.option_power_saving;
 
       // Start next colour immediately with ZERO delay
       s_game.data.current_color_idx = (s_game.data.current_color_idx + 1) % 64;
@@ -1765,6 +1894,16 @@ void game_state_dev_add_unlock_points(uint32_t points) {
 
 bool game_state_is_vibration_enabled(void) {
   return s_game.data.option_vibration;
+}
+
+bool game_state_get_power_saving(void) {
+  return s_game.data.option_power_saving;
+}
+
+void game_state_set_power_saving(bool enabled) {
+  s_game.data.option_power_saving = enabled;
+  s_global_data.option_power_saving = enabled;
+  game_state_save();
 }
 
 void game_state_weak_vibe(void) {
