@@ -58,8 +58,8 @@ static void prv_timer_callback(void *data) {
 
   game_state_tick(tick_interval, &pixel_added, &fill_completed);
 
-  if (fill_completed && game->data.option_vibration) {
-    vibes_short_pulse();
+  if (fill_completed) {
+    game_state_vibe_short();
   }
 
   // Check if win game celebration was triggered

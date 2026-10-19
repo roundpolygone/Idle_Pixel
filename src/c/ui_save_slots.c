@@ -91,12 +91,12 @@ static void prv_action_select_callback(MenuLayer *menu_layer, MenuIndex *cell_in
   switch (cell_index->row) {
     case 0: // Load
       game_state_switch_to_slot(s_selected_slot);
-      vibes_short_pulse();
+      game_state_vibe_short();
       idle_pixel_pop_to_root();
       break;
     case 1: // Overwrite
       game_state_save_to_slot(s_selected_slot);
-      vibes_short_pulse();
+      game_state_vibe_short();
       window_stack_pop(true);
       prv_refresh_used_slots();
       if (s_slots_menu_layer) menu_layer_reload_data(s_slots_menu_layer);
@@ -104,7 +104,7 @@ static void prv_action_select_callback(MenuLayer *menu_layer, MenuIndex *cell_in
       break;
     case 2: // Clear
       game_state_clear_slot(s_selected_slot);
-      vibes_double_pulse();
+      game_state_vibe_double();
       window_stack_pop(true);
       prv_refresh_used_slots();
       if (s_slots_menu_layer) {
@@ -228,7 +228,7 @@ static void prv_slots_select_callback(MenuLayer *menu_layer, MenuIndex *cell_ind
       }
     }
     game_state_start_new_run_in_slot(new_slot);
-    vibes_short_pulse();
+    game_state_vibe_short();
     idle_pixel_pop_to_root();
   }
 }

@@ -354,6 +354,10 @@ void game_state_dev_add_cents(uint32_t cents);
 void game_state_dev_add_unlock_points(uint32_t points);
 #endif
 void game_state_weak_vibe(void);
+void game_state_vibe_short(void);
+void game_state_vibe_double(void);
+void game_state_vibe_long(void);
+bool game_state_is_vibration_enabled(void);
 void game_state_cycle_bg_color(void);
 
 // New layer bonus upgrade

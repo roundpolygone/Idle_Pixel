@@ -209,7 +209,7 @@ static void prv_new_save_click_handler(ClickRecognizerRef recognizer, void *cont
 
   if (empty_slot != 0xFF) {
     game_state_start_new_run_in_slot(empty_slot);
-    vibes_short_pulse();
+    game_state_vibe_short();
   } else {
     // If all slots are full, show save slots manager so user can choose
     ui_save_slots_show();
@@ -239,7 +239,7 @@ static void prv_window_load(Window *window) {
   }
 
   s_anim_timer = app_timer_register(33, prv_anim_timer_callback, NULL);
-  vibes_double_pulse();
+  game_state_vibe_double();
 }
 
 static void prv_window_unload(Window *window) {

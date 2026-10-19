@@ -955,6 +955,7 @@ void game_state_init(void) {
     s_game.data.is_used = true;
     persist_write_data(prv_get_slot_key(0), &s_game.data, sizeof(GameSaveData));
   } else {
+    prv_apply_global_config_to_session();
     // Process offline idle catch-up with closed-game idle speed
     time_t now = time(NULL);
     if (s_game.data.last_save_time > 0 && now > s_game.data.last_save_time) {
@@ -1740,14 +1741,36 @@ void game_state_dev_add_unlock_points(uint32_t points) {
 }
 #endif
 
+bool game_state_is_vibration_enabled(void) {
+  return s_game.data.option_vibration;
+}
+
 void game_state_weak_vibe(void) {
   if (!s_game.data.option_vibration) return;
-  static const uint32_t s_weak_segments[] = { 20 };
+  static const uint32_t s_weak_segments[] = { 40 };
   VibePattern pat = {
     .durations = s_weak_segments,
     .num_segments = 1,
   };
   vibes_enqueue_custom_pattern(pat);
+}
+
+void game_state_vibe_short(void) {
+  if (s_game.data.option_vibration) {
+    vibes_short_pulse();
+  }
+}
+
+void game_state_vibe_double(void) {
+  if (s_game.data.option_vibration) {
+    vibes_double_pulse();
+  }
+}
+
+void game_state_vibe_long(void) {
+  if (s_game.data.option_vibration) {
+    vibes_long_pulse();
+  }
 }
 
 void game_state_cycle_bg_color(void) {

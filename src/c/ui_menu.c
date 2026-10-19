@@ -286,7 +286,7 @@ static void prv_prestige_confirm_select_callback(MenuLayer *menu_layer, MenuInde
   if (cell_index->row == 0) {
     if (game_state_can_prestige()) {
       game_state_prestige();
-      vibes_double_pulse();
+      game_state_vibe_double();
       idle_pixel_pop_to_root();
     }
   } else {
@@ -379,7 +379,7 @@ static void prv_store_select_callback(MenuLayer *menu_layer, MenuIndex *cell_ind
   UpgradeId id = (UpgradeId)cell_index->row;
   bool bought = game_state_buy_upgrade(id);
   if (bought) {
-    vibes_short_pulse();
+    game_state_vibe_short();
     menu_layer_reload_data(menu_layer);
     if (s_store_header_layer) {
       layer_mark_dirty(s_store_header_layer);
@@ -463,7 +463,7 @@ static void prv_reset_content_update_proc(Layer *layer, GContext *ctx) {
 
 static void prv_reset_select_handler(ClickRecognizerRef recognizer, void *context) {
   game_state_hard_reset();
-  vibes_long_pulse();
+  game_state_vibe_long();
   idle_pixel_pop_to_root();
 }
 
@@ -536,6 +536,7 @@ static void prv_options_select_callback(MenuLayer *menu_layer, MenuIndex *cell_i
     case 0:
       game->data.option_24h = !game->data.option_24h;
       game_state_save();
+      game_state_weak_vibe();
       menu_layer_reload_data(menu_layer);
       break;
     case 1:
@@ -546,10 +547,10 @@ static void prv_options_select_callback(MenuLayer *menu_layer, MenuIndex *cell_i
       break;
     case 2:
       game->data.option_vibration = !game->data.option_vibration;
-      if (game->data.option_vibration) {
-        game_state_weak_vibe();
-      }
       game_state_save();
+      if (game->data.option_vibration) {
+        vibes_short_pulse();
+      }
       menu_layer_reload_data(menu_layer);
       break;
     case 3:
