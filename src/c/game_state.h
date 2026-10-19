@@ -90,7 +90,7 @@ typedef struct __attribute__((__packed__)) {
   uint8_t upgrade_boost_limit_lvl;   // lvl 0 = 100% max limit (+25% per lvl)
   uint8_t upgrade_offline_cap_lvl;   // lvl 0 = 0m (locked), lvl 1 = 15m (+15m per lvl)
   uint8_t upgrade_hold_boost_lvl;    // +10% clicks/sec per level (base 1.0 click/s)
-  uint8_t upgrade_offline_speed_lvl; // closed game speed (base 5%, max lvl 7 = 100%)
+  uint8_t upgrade_offline_speed_lvl; // closed game speed (base 10%, max lvl 6 = 100%)
   uint8_t upgrade_layer_cents_lvl;   // earn +1¢ per 8 pixels per level (base 1¢/layer)
   uint8_t upgrade_auto_boost_lvl;    // Crown item: 1 auto boost every 5s..1s
   uint8_t upgrade_clock_boost_lvl;   // Crown item: +20% boost on clock per level

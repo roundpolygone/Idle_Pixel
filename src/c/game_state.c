@@ -69,10 +69,10 @@ static void prv_add_start_level_bonus(uint8_t count) {
   s_game.data.upgrade_offline_cap_lvl += count;
   s_game.data.upgrade_hold_boost_lvl += count;
   s_game.data.upgrade_layer_cents_lvl += count;
-  if (s_game.data.upgrade_offline_speed_lvl + count <= 7) {
+  if (s_game.data.upgrade_offline_speed_lvl + count <= 6) {
     s_game.data.upgrade_offline_speed_lvl += count;
   } else {
-    s_game.data.upgrade_offline_speed_lvl = 7;
+    s_game.data.upgrade_offline_speed_lvl = 6;
   }
 }
 
@@ -197,14 +197,14 @@ bool game_state_is_offline_unlocked(void) {
   return true; // Always unlocked at level 0 (1 minute initial cap)
 }
 
-// Formula B: 1.5x compound growth starting at 1 minute, reaching 24h at Level 17
-static const uint32_t s_offline_cap_minutes[18] = {
-  1, 2, 3, 5, 7, 11, 17, 25, 38, 57, 86, 130, 194, 292, 438, 657, 985, 1440
+// Formula B: 1.5x compound growth starting at 5 minutes, reaching 24h at Level 14
+static const uint32_t s_offline_cap_minutes[15] = {
+  5, 8, 12, 18, 27, 40, 60, 90, 135, 200, 300, 450, 675, 1000, 1440
 };
 
 uint32_t game_state_get_max_offline_sec(void) {
   uint8_t lvl = s_game.data.upgrade_offline_cap_lvl;
-  if (lvl >= 17) return 24 * 3600; // 24 hours ceiling (1440m)
+  if (lvl >= 14) return 24 * 3600; // 24 hours ceiling (1440m)
   return s_offline_cap_minutes[lvl] * 60;
 }
 
@@ -229,14 +229,25 @@ uint32_t game_state_get_hold_boost_interval_ms(void) {
   return 105 - ((uint32_t)(lvl - 15) * 7);
 }
 
-// Away idle speed percentage: base 5% + 15% per level, max capped at 100%
+// Away idle speed percentage: base 10% + 15% per level, max capped at 100% (Level 6 = 100%)
 uint32_t game_state_get_offline_speed_percent(void) {
-  uint32_t pct = 5 + ((uint32_t)s_game.data.upgrade_offline_speed_lvl * 15);
+  uint32_t pct = 10 + ((uint32_t)s_game.data.upgrade_offline_speed_lvl * 15);
   return (pct > 100) ? 100 : pct;
 }
 
+static const uint32_t s_layer_bonus_table[16] = {
+  1, 2, 4, 7, 12, 20, 35, 60, 100, 170, 290, 490, 830, 1400, 2370, 4000
+};
+
 uint32_t game_state_get_layer_bonus_cents(void) {
-  return 1 + s_game.data.upgrade_layer_cents_lvl;
+  uint8_t lvl = s_game.data.upgrade_layer_cents_lvl;
+  if (lvl < 16) return s_layer_bonus_table[lvl];
+  uint32_t val = s_layer_bonus_table[15];
+  for (uint8_t i = 15; i < lvl; i++) {
+    if (val > 2800000000UL) return 4000000000UL;
+    val = (val * 3) / 2;
+  }
+  return val;
 }
 
 uint32_t game_state_get_clock_boost_percent(void) {
@@ -386,7 +397,9 @@ static void prv_fmt_stat_offline_speed(char *buf, size_t buf_size) {
 
 static void prv_fmt_stat_layer_bonus(char *buf, size_t buf_size) {
   uint32_t bonus = game_state_get_layer_bonus_cents();
-  snprintf(buf, buf_size, "+%lu¢/8px", (unsigned long)bonus);
+  char cost_buf[24];
+  game_state_format_currency(bonus, cost_buf, sizeof(cost_buf));
+  snprintf(buf, buf_size, "+%s/row", cost_buf);
 }
 
 static void prv_fmt_stat_auto_boost(char *buf, size_t buf_size) {
@@ -495,11 +508,11 @@ static const UpgradeDef s_upgrades[UPGRADE_COUNT] = {
     .level_offset = offsetof(GameSaveData, upgrade_offline_speed_lvl),
     .curve_type = COST_CURVE_2X,
     .currency_type = CURRENCY_TYPE_CENTS,
-    .max_level = 7,
+    .max_level = 6,
     .format_stat = prv_fmt_stat_offline_speed
   },
   [UPGRADE_LAYER_BONUS] = {
-    .title = "Layer Bonus (+1¢/row)",
+    .title = "Layer Bonus (1.5x/row)",
     .level_offset = offsetof(GameSaveData, upgrade_layer_cents_lvl),
     .curve_type = COST_CURVE_2X,
     .currency_type = CURRENCY_TYPE_CENTS,
@@ -733,9 +746,9 @@ static void prv_init_default_save_data(void) {
   s_game.data.upgrade_boost_sustain_lvl = start_lvl;
   s_game.data.upgrade_boost_diminish_lvl = start_lvl;
   s_game.data.upgrade_boost_limit_lvl = start_lvl;
-  s_game.data.upgrade_offline_cap_lvl = (start_lvl > 5) ? 5 : start_lvl;
+  s_game.data.upgrade_offline_cap_lvl = start_lvl;
   s_game.data.upgrade_hold_boost_lvl = start_lvl;
-  s_game.data.upgrade_offline_speed_lvl = (start_lvl > 7) ? 7 : start_lvl;
+  s_game.data.upgrade_offline_speed_lvl = (start_lvl > 6) ? 6 : start_lvl;
   s_game.data.upgrade_layer_cents_lvl = start_lvl;
   s_game.data.upgrade_auto_boost_lvl = s_global_data.upgrade_auto_boost_lvl;
   s_game.data.upgrade_clock_boost_lvl = s_global_data.upgrade_clock_boost_lvl;

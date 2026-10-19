@@ -130,9 +130,9 @@ All upgrades feature declarative cost scaling, live stat formatters, and marquee
 5. **Boost Diminish Rate (-20%)**: Slower momentum decay rate.
 6. **Boost Max Limit (+25%)**: Calibrated between +100% (2.0x) and +300% (4.0x).
 7. **Hold Auto-Press (+10%)**: Base 1.0 click/s up to rapid fire.
-8. **Max Idle Time (+50%)**: Formula B compound scaling starting at **1 minute** up to a 24-hour ceiling at Level 17 (1m, 2m, 3m, 5m, 7m, 11m, 17m, 25m, 38m, 57m, 1h26m, 2h10m, 3h14m, 4h52m, 7h18m, 10h57m, 16h25m, 24h).
-9. **Away Idle Speed (+15%)**: Closed-game speed starting at 5% base up to 100% efficiency.
-10. **Layer Bonus (+1¢/row)**: Adds +1¢ per completed 8-pixel layer.
+8. **Max Idle Time (+50%)**: Formula B compound scaling starting at **5 minutes** up to a 24-hour ceiling at Level 14 (5m, 8m, 12m, 18m, 27m, 40m, 1h, 1h30m, 2h15m, 3h20m, 5h, 7h30m, 11h15m, 16h40m, 24h).
+9. **Away Idle Speed (+15%)**: Closed-game speed starting at 10% base up to 100% efficiency at Level 6.
+10. **Layer Bonus (1.5x/row)**: 1.5x compounding income per completed 8-pixel layer (1¢, 2¢, 4¢, 7¢, 12¢, 20¢, 35¢, 60¢, $1.00...). Easily outpaces the 2.0x cost curve to unlock high-tier store upgrades.
 
 #### Crown Perks (Persistent Across All Saves — 1 Crown Each)
 11. **👑 Auto Boost**: Fires 1 auto boost on an interval. Purchasable 5 times, taking 1 second off the interval each level (5s down to 1s at Level 5).
