@@ -1,10 +1,6 @@
 #include "Idle_Pixel.h"
 #include "game_state.h"
-#include "ui_grid.h"
-#include "ui_menu.h"
-#include "ui_clock.h"
-#include "ui_win.h"
-#include "ui_offline_summary.h"
+#include "ui.h"
 
 static Window *s_window;
 static AppTimer *s_tick_timer = NULL;
@@ -49,11 +45,12 @@ static void prv_timer_callback(void *data) {
     }
   }
 
-  // Handle Crown Auto Boost (1 auto boost every 5s)
-  if (game->data.upgrade_auto_boost_lvl > 0) {
+  // Handle Crown Auto Boost (starts at 5s, -1s per level down to 1s)
+  uint32_t auto_boost_interval = game_state_get_auto_boost_interval_ms();
+  if (auto_boost_interval > 0) {
     static uint32_t s_auto_boost_timer_ms = 0;
     s_auto_boost_timer_ms += tick_interval;
-    if (s_auto_boost_timer_ms >= 5000) {
+    if (s_auto_boost_timer_ms >= auto_boost_interval) {
       s_auto_boost_timer_ms = 0;
       game_state_activate_boost();
     }
@@ -156,14 +153,15 @@ static void prv_window_unload(Window *window) {
 }
 
 static void prv_accel_tap_handler(AccelAxisType axis, int32_t direction) {
-  GameState *game = game_state_get();
-  if (game && game->data.option_tap_to_wake) {
-    light_enable_interaction();
-  }
+  light_enable_interaction();
 }
 
 static void prv_init(void) {
   game_state_init();
+
+#if defined(_PBL_API_EXISTS_app_touch_navigation_enable)
+  app_touch_navigation_enable(true);
+#endif
 
   accel_tap_service_subscribe(prv_accel_tap_handler);
 
@@ -177,9 +175,6 @@ static void prv_init(void) {
 
   const bool animated = true;
   window_stack_push(s_window, animated);
-
-  // If closed > 3 minutes (and not first time opened), show preliminary summary
-  ui_offline_summary_show_if_needed();
 
   s_tick_timer = app_timer_register(TICK_INTERVAL_MS, prv_timer_callback, NULL);
 }

@@ -12,17 +12,17 @@
 
 // Build configuration: Set to 1 to enable developer tools & testing menu; set to 0 for release builds.
 #ifndef ENABLE_DEV_MENU
-#define ENABLE_DEV_MENU 1
+#define ENABLE_DEV_MENU 0
 #endif
 
 #define SAVE_VERSION 12
-#define NUM_SAVE_SLOTS 3
+#define NUM_SAVE_SLOTS 64
 #define PERSIST_KEY_GLOBAL_CONFIG 96
 #define PERSIST_KEY_GLOBAL_CROWNS 98
 #define PERSIST_KEY_GLOBAL_GOLD_PIXELS 98 // legacy alias
 #define PERSIST_KEY_ACTIVE_SLOT 99
 #define PERSIST_KEY_GAME_DATA 100
-#define PERSIST_KEY_SLOT_BASE 101 // Slots 101, 102, 103
+#define PERSIST_KEY_SLOT_BASE 101 // Slots 101 .. 164
 
 typedef struct __attribute__((__packed__)) {
   uint32_t version;
@@ -33,19 +33,20 @@ typedef struct __attribute__((__packed__)) {
 
   uint32_t crowns;                  // available crowns bank
   uint32_t total_crowns_earned;     // total crowns earned across all saves
-  uint8_t  upgrade_auto_boost_lvl;  // Crown item: 1 auto boost every 5s
+  uint8_t  upgrade_auto_boost_lvl;  // Crown item: 1 auto boost every 5s..1s
   uint8_t  upgrade_clock_boost_lvl; // Crown item: +20% boost on clock per level
   uint8_t  upgrade_headstart_lvl;   // Crown item: +50¢ starting cash & speed
+  uint8_t  upgrade_start_level_lvl; // Crown item: starts each upgrade at +1 lvl after prestige
 } GlobalAppData;
 
-// Unlockable cosmetics: 13 background colors, 7 fill orders, 3 fonts, 3 font sizes, 5 clock styles (30 total unlocks)
-#define UNLOCK_BG_COLORS_COUNT 13
+// Unlockable cosmetics: 19 background colors, 7 fill orders, 3 fonts, 3 font sizes, 5 clock styles (36 total unlocks)
+#define UNLOCK_BG_COLORS_COUNT 19
 #define BG_COLOR_AUTO 255
 #define UNLOCK_FILL_ORDERS_COUNT 7
 #define UNLOCK_FONTS_COUNT 3
 #define UNLOCK_FONT_SIZES_COUNT 3
 #define UNLOCK_CLOCK_STYLES_COUNT 5
-#define TOTAL_MAX_UNLOCKS 30
+#define TOTAL_MAX_UNLOCKS 36
 
 typedef enum {
   FILL_ORDER_NORMAL = 0,
@@ -91,9 +92,10 @@ typedef struct __attribute__((__packed__)) {
   uint8_t upgrade_hold_boost_lvl;    // +10% clicks/sec per level (base 1.0 click/s)
   uint8_t upgrade_offline_speed_lvl; // closed game speed (base 5%, max lvl 7 = 100%)
   uint8_t upgrade_layer_cents_lvl;   // earn +1¢ per 8 pixels per level (base 1¢/layer)
-  uint8_t upgrade_auto_boost_lvl;    // Crown item: 1 auto boost every 5s
+  uint8_t upgrade_auto_boost_lvl;    // Crown item: 1 auto boost every 5s..1s
   uint8_t upgrade_clock_boost_lvl;   // Crown item: +20% boost on clock per level
   uint8_t upgrade_headstart_lvl;     // Crown item: +50¢ starting cash & speed
+  uint8_t upgrade_start_level_lvl;   // Crown item: starts each upgrade at +1 lvl after prestige
   bool    crown_spent;               // true if crown from this completed save has been spent
 
   // Unlocks & Selections
@@ -268,6 +270,7 @@ typedef enum {
   UPGRADE_AUTO_BOOST,
   UPGRADE_CLOCK_BOOST,
   UPGRADE_STARTING_HEADSTART,
+  UPGRADE_START_LEVEL,
   UPGRADE_COUNT
 } UpgradeId;
 
@@ -346,8 +349,10 @@ GFont game_state_get_clock_digit_font(uint8_t font_idx, uint8_t size_idx);
 GFont game_state_get_clock_text_font(uint8_t font_idx, uint8_t size_idx, uint8_t size_type);
 uint8_t game_state_get_unlockable_bg_color(uint8_t index);
 const char* game_state_get_unlockable_bg_color_name(uint8_t index);
+#if ENABLE_DEV_MENU
 void game_state_dev_add_cents(uint32_t cents);
 void game_state_dev_add_unlock_points(uint32_t points);
+#endif
 void game_state_weak_vibe(void);
 void game_state_cycle_bg_color(void);
 
@@ -358,8 +363,10 @@ bool game_state_buy_layer_bonus(void);
 
 // Crown store purchases & management
 uint32_t game_state_get_available_crowns(void);
+uint32_t game_state_get_total_crowns_earned(void);
 bool game_state_spend_crown(void);
 uint32_t game_state_get_auto_boost_cost_crowns(void);
+uint32_t game_state_get_auto_boost_interval_ms(void);
 bool game_state_buy_auto_boost(void);
 uint32_t game_state_get_clock_boost_percent(void);
 uint32_t game_state_get_clock_boost_cost_crowns(void);
@@ -369,10 +376,14 @@ uint32_t game_state_get_prestige_multiplier_percent(void);
 uint32_t game_state_get_prestige_payout(void);
 uint32_t game_state_get_starting_headstart_cents(void);
 bool game_state_buy_starting_headstart(void);
+uint8_t game_state_get_start_level(void);
+bool game_state_buy_start_level(void);
 
 uint32_t game_state_get_global_crowns(void);
+#if ENABLE_DEV_MENU
 void game_state_dev_add_crown(void);
+#define game_state_dev_add_gold_pixel game_state_dev_add_crown
+#endif
 bool game_state_start_new_run_in_slot(uint8_t slot_idx);
 
 #define game_state_get_global_gold_pixels game_state_get_global_crowns
-#define game_state_dev_add_gold_pixel game_state_dev_add_crown

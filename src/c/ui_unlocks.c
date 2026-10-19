@@ -1,4 +1,4 @@
-#include "ui_unlocks.h"
+#include "ui.h"
 #include "game_state.h"
 
 // Main Unlocks Menu
@@ -25,6 +25,13 @@ static MenuLayer *s_clock_style_menu_layer = NULL;
 
 static Window *s_font_size_window = NULL;
 static MenuLayer *s_font_size_menu_layer = NULL;
+
+static MenuNavConfig s_unlocks_nav_cfg;
+static MenuNavConfig s_color_nav_cfg;
+static MenuNavConfig s_font_nav_cfg;
+static MenuNavConfig s_fill_order_nav_cfg;
+static MenuNavConfig s_clock_style_nav_cfg;
+static MenuNavConfig s_font_size_nav_cfg;
 
 // =============================================================
 // 1. Color Picker with Active Real-Time Background Preview
@@ -64,6 +71,10 @@ static uint16_t prv_color_get_num_rows(MenuLayer *menu_layer, uint16_t section_i
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_bg_colors < UNLOCK_BG_COLORS_COUNT);
   return (can_buy ? 1 : 0) + 1 + game->data.unlocked_bg_colors;
+}
+
+static uint16_t prv_color_get_row_count(void) {
+  return prv_color_get_num_rows(NULL, 0, NULL);
 }
 
 static void prv_update_bg_picker_colors(void) {
@@ -129,12 +140,10 @@ static void prv_color_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex
       graphics_draw_round_rect(ctx, card_rect, 4);
 
       graphics_context_set_text_color(ctx, card_fg);
-      graphics_draw_text(ctx, buy_buf,
-                         fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                         GRect(8, 2, card_rect.size.w - 16, 20),
-                         GTextOverflowModeTrailingEllipsis,
-                         GTextAlignmentLeft,
-                         NULL);
+      ui_menu_draw_text_marquee(ctx, buy_buf,
+                                fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                                GRect(8, 2, card_rect.size.w - 16, 20),
+                                card_fg, true);
       graphics_draw_text(ctx, "Tap to spend 1 unlock pt",
                          fonts_get_system_font(FONT_KEY_GOTHIC_14),
                          GRect(8, 22, card_rect.size.w - 16, 16),
@@ -142,7 +151,7 @@ static void prv_color_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex
                          GTextAlignmentLeft,
                          NULL);
     } else {
-      menu_cell_basic_draw(ctx, cell_layer, buy_buf, "Tap to spend 1 unlock pt", NULL);
+      ui_menu_cell_basic_draw(ctx, cell_layer, buy_buf, "Tap to spend 1 unlock pt", NULL);
     }
     return;
   }
@@ -357,22 +366,28 @@ static void prv_color_window_load(Window *window) {
   });
 
   menu_layer_set_center_focused(s_color_menu_layer, true);
-  menu_layer_set_click_config_onto_window(s_color_menu_layer, window);
+  ui_menu_bind_navigation(window, s_color_menu_layer, &s_color_nav_cfg, prv_color_get_row_count);
   layer_add_child(window_layer, menu_layer_get_layer(s_color_menu_layer));
 
   prv_update_bg_picker_colors();
 
-  bool can_buy = (game->data.unlocked_bg_colors <= UNLOCK_BG_COLORS_COUNT);
+  bool can_buy = (game->data.unlocked_bg_colors < UNLOCK_BG_COLORS_COUNT);
   uint16_t initial_row = 0;
   if (game->data.selected_bg_color_index == BG_COLOR_AUTO) {
     initial_row = can_buy ? 1 : 0;
   } else {
-    initial_row = (can_buy ? 1 : 0) + 1 + game->data.selected_bg_color_index;
+    for (uint8_t i = 0; i < game->data.unlocked_bg_colors; i++) {
+      if (game_state_get_unlockable_bg_color(i) == game->data.selected_bg_color_index) {
+        initial_row = (can_buy ? 1 : 0) + 1 + i;
+        break;
+      }
+    }
   }
   menu_layer_set_selected_index(s_color_menu_layer, (MenuIndex){ .section = 0, .row = initial_row }, MenuRowAlignCenter, false);
 }
 
 static void prv_color_window_unload(Window *window) {
+  ui_menu_unbind_navigation(&s_color_nav_cfg);
   layer_destroy(s_color_preview_layer);
   s_color_preview_layer = NULL;
   menu_layer_destroy(s_color_menu_layer);
@@ -419,6 +434,10 @@ static uint16_t prv_font_get_num_rows(MenuLayer *menu_layer, uint16_t section_in
   return (can_buy ? 1 : 0) + game->data.unlocked_fonts;
 }
 
+static uint16_t prv_font_get_row_count(void) {
+  return prv_font_get_num_rows(NULL, 0, NULL);
+}
+
 static void prv_font_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_fonts <= UNLOCK_FONTS_COUNT);
@@ -431,14 +450,14 @@ static void prv_font_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
     } else {
       snprintf(buy_buf, sizeof(buy_buf), "+ Unlock %s (Need 1 Pt)", next_name);
     }
-    menu_cell_basic_draw(ctx, cell_layer, buy_buf, "Tap to spend 1 unlock pt", NULL);
+    ui_menu_cell_basic_draw(ctx, cell_layer, buy_buf, "Tap to spend 1 unlock pt", NULL);
     return;
   }
 
   uint8_t font_idx = (uint8_t)(cell_index->row - (can_buy ? 1 : 0));
   const char *name = game_state_get_font_name(font_idx);
   const char *sub = (font_idx == game->data.selected_font) ? "[Active Font]" : NULL;
-  menu_cell_basic_draw(ctx, cell_layer, name, sub, NULL);
+  ui_menu_cell_basic_draw(ctx, cell_layer, name, sub, NULL);
 }
 
 static void prv_font_selection_changed(MenuLayer *menu_layer, MenuIndex new_index, MenuIndex old_index, void *context) {
@@ -500,11 +519,12 @@ static void prv_font_window_load(Window *window) {
     .selection_changed = prv_font_selection_changed,
   });
 
-  menu_layer_set_click_config_onto_window(s_font_menu_layer, window);
+  ui_menu_bind_navigation(window, s_font_menu_layer, &s_font_nav_cfg, prv_font_get_row_count);
   layer_add_child(window_layer, menu_layer_get_layer(s_font_menu_layer));
 }
 
 static void prv_font_window_unload(Window *window) {
+  ui_menu_unbind_navigation(&s_font_nav_cfg);
   layer_destroy(s_font_preview_layer);
   s_font_preview_layer = NULL;
   menu_layer_destroy(s_font_menu_layer);
@@ -532,6 +552,10 @@ static uint16_t prv_fill_order_get_num_rows(MenuLayer *menu_layer, uint16_t sect
   return (can_buy ? 1 : 0) + game->data.unlocked_fill_orders;
 }
 
+static uint16_t prv_fill_order_get_row_count(void) {
+  return prv_fill_order_get_num_rows(NULL, 0, NULL);
+}
+
 static void prv_fill_order_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_fill_orders <= UNLOCK_FILL_ORDERS_COUNT);
@@ -544,14 +568,14 @@ static void prv_fill_order_draw_row(GContext *ctx, const Layer *cell_layer, Menu
     } else {
       snprintf(buy_buf, sizeof(buy_buf), "+ Unlock %s (Need 1 Pt)", next_name);
     }
-    menu_cell_basic_draw(ctx, cell_layer, buy_buf, "Tap to spend 1 unlock pt", NULL);
+    ui_menu_cell_basic_draw(ctx, cell_layer, buy_buf, "Tap to spend 1 unlock pt", NULL);
     return;
   }
 
   uint8_t order_idx = (uint8_t)(cell_index->row - (can_buy ? 1 : 0));
   const char *name = game_state_get_fill_order_name((FillOrderType)order_idx);
   const char *sub = (order_idx == game->data.selected_fill_order) ? "[Active]" : NULL;
-  menu_cell_basic_draw(ctx, cell_layer, name, sub, NULL);
+  ui_menu_cell_basic_draw(ctx, cell_layer, name, sub, NULL);
 }
 
 static void prv_fill_order_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
@@ -586,11 +610,12 @@ static void prv_fill_order_window_load(Window *window) {
     .select_click = prv_fill_order_select_callback,
   });
 
-  menu_layer_set_click_config_onto_window(s_fill_order_menu_layer, window);
+  ui_menu_bind_navigation(window, s_fill_order_menu_layer, &s_fill_order_nav_cfg, prv_fill_order_get_row_count);
   layer_add_child(window_layer, menu_layer_get_layer(s_fill_order_menu_layer));
 }
 
 static void prv_fill_order_window_unload(Window *window) {
+  ui_menu_unbind_navigation(&s_fill_order_nav_cfg);
   menu_layer_destroy(s_fill_order_menu_layer);
   s_fill_order_menu_layer = NULL;
   window_destroy(s_fill_order_window);
@@ -616,6 +641,10 @@ static uint16_t prv_clock_style_get_num_rows(MenuLayer *menu_layer, uint16_t sec
   return (can_buy ? 1 : 0) + game->data.unlocked_clock_styles;
 }
 
+static uint16_t prv_clock_style_get_row_count(void) {
+  return prv_clock_style_get_num_rows(NULL, 0, NULL);
+}
+
 static void prv_clock_style_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_clock_styles <= UNLOCK_CLOCK_STYLES_COUNT);
@@ -628,14 +657,14 @@ static void prv_clock_style_draw_row(GContext *ctx, const Layer *cell_layer, Men
     } else {
       snprintf(buy_buf, sizeof(buy_buf), "+ Unlock %s (Need 1 Pt)", next_name);
     }
-    menu_cell_basic_draw(ctx, cell_layer, buy_buf, "Tap to spend 1 unlock pt", NULL);
+    ui_menu_cell_basic_draw(ctx, cell_layer, buy_buf, "Tap to spend 1 unlock pt", NULL);
     return;
   }
 
   uint8_t style_idx = (uint8_t)(cell_index->row - (can_buy ? 1 : 0));
   const char *name = game_state_get_clock_style_name(style_idx);
   const char *sub = (style_idx == game->data.selected_clock_style) ? "[Active Style]" : NULL;
-  menu_cell_basic_draw(ctx, cell_layer, name, sub, NULL);
+  ui_menu_cell_basic_draw(ctx, cell_layer, name, sub, NULL);
 }
 
 static void prv_clock_style_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
@@ -670,11 +699,12 @@ static void prv_clock_style_window_load(Window *window) {
     .select_click = prv_clock_style_select_callback,
   });
 
-  menu_layer_set_click_config_onto_window(s_clock_style_menu_layer, window);
+  ui_menu_bind_navigation(window, s_clock_style_menu_layer, &s_clock_style_nav_cfg, prv_clock_style_get_row_count);
   layer_add_child(window_layer, menu_layer_get_layer(s_clock_style_menu_layer));
 }
 
 static void prv_clock_style_window_unload(Window *window) {
+  ui_menu_unbind_navigation(&s_clock_style_nav_cfg);
   menu_layer_destroy(s_clock_style_menu_layer);
   s_clock_style_menu_layer = NULL;
   window_destroy(s_clock_style_window);
@@ -700,6 +730,10 @@ static uint16_t prv_font_size_get_num_rows(MenuLayer *menu_layer, uint16_t secti
   return (can_buy ? 1 : 0) + game->data.unlocked_font_sizes;
 }
 
+static uint16_t prv_font_size_get_row_count(void) {
+  return prv_font_size_get_num_rows(NULL, 0, NULL);
+}
+
 static void prv_font_size_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_font_sizes < UNLOCK_FONT_SIZES_COUNT);
@@ -712,14 +746,14 @@ static void prv_font_size_draw_row(GContext *ctx, const Layer *cell_layer, MenuI
     } else {
       snprintf(buy_buf, sizeof(buy_buf), "+ Unlock %s (Need 1 Pt)", next_name);
     }
-    menu_cell_basic_draw(ctx, cell_layer, buy_buf, "Tap to spend 1 unlock pt", NULL);
+    ui_menu_cell_basic_draw(ctx, cell_layer, buy_buf, "Tap to spend 1 unlock pt", NULL);
     return;
   }
 
   uint8_t size_idx = (uint8_t)(cell_index->row - (can_buy ? 1 : 0));
   const char *name = game_state_get_font_size_name(size_idx);
   const char *sub = (size_idx == game->data.selected_font_size) ? "[Active Size]" : NULL;
-  menu_cell_basic_draw(ctx, cell_layer, name, sub, NULL);
+  ui_menu_cell_basic_draw(ctx, cell_layer, name, sub, NULL);
 }
 
 static void prv_font_size_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
@@ -754,11 +788,12 @@ static void prv_font_size_window_load(Window *window) {
     .select_click = prv_font_size_select_callback,
   });
 
-  menu_layer_set_click_config_onto_window(s_font_size_menu_layer, window);
+  ui_menu_bind_navigation(window, s_font_size_menu_layer, &s_font_size_nav_cfg, prv_font_size_get_row_count);
   layer_add_child(window_layer, menu_layer_get_layer(s_font_size_menu_layer));
 }
 
 static void prv_font_size_window_unload(Window *window) {
+  ui_menu_unbind_navigation(&s_font_size_nav_cfg);
   menu_layer_destroy(s_font_size_menu_layer);
   s_font_size_menu_layer = NULL;
   window_destroy(s_font_size_window);
@@ -812,6 +847,10 @@ static uint16_t prv_unlocks_get_num_rows(MenuLayer *menu_layer, uint16_t section
   return 5;
 }
 
+static uint16_t prv_unlocks_get_row_count(void) {
+  return prv_unlocks_get_num_rows(NULL, 0, NULL);
+}
+
 static void prv_unlocks_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
   GameState *game = game_state_get();
 
@@ -819,13 +858,13 @@ static void prv_unlocks_draw_row(GContext *ctx, const Layer *cell_layer, MenuInd
     case 0: {
       char sub[48];
       if (game->data.unlocked_bg_colors < UNLOCK_BG_COLORS_COUNT) {
-        snprintf(sub, sizeof(sub), "Next: %s (1 Pt) | %d/13",
+        snprintf(sub, sizeof(sub), "Next: %s (1 Pt) | %d/%d",
                  game_state_get_unlockable_bg_color_name(game->data.unlocked_bg_colors),
-                 game->data.unlocked_bg_colors);
+                 game->data.unlocked_bg_colors, UNLOCK_BG_COLORS_COUNT);
       } else {
-        snprintf(sub, sizeof(sub), "All 13 Unlocked");
+        snprintf(sub, sizeof(sub), "All %d Unlocked", UNLOCK_BG_COLORS_COUNT);
       }
-      menu_cell_basic_draw(ctx, cell_layer, "Background Colors", sub, NULL);
+      ui_menu_cell_basic_draw(ctx, cell_layer, "Background Colors", sub, NULL);
       break;
     }
     case 1: {
@@ -836,7 +875,7 @@ static void prv_unlocks_draw_row(GContext *ctx, const Layer *cell_layer, MenuInd
       } else {
         snprintf(sub, sizeof(sub), "All 8 Unlocked");
       }
-      menu_cell_basic_draw(ctx, cell_layer, "Fill Orders", sub, NULL);
+      ui_menu_cell_basic_draw(ctx, cell_layer, "Fill Orders", sub, NULL);
       break;
     }
     case 2: {
@@ -847,7 +886,7 @@ static void prv_unlocks_draw_row(GContext *ctx, const Layer *cell_layer, MenuInd
       } else {
         snprintf(sub, sizeof(sub), "All 4 Unlocked");
       }
-      menu_cell_basic_draw(ctx, cell_layer, "Fonts", sub, NULL);
+      ui_menu_cell_basic_draw(ctx, cell_layer, "Fonts", sub, NULL);
       break;
     }
     case 3: {
@@ -858,7 +897,7 @@ static void prv_unlocks_draw_row(GContext *ctx, const Layer *cell_layer, MenuInd
       } else {
         snprintf(sub, sizeof(sub), "All 3 Unlocked");
       }
-      menu_cell_basic_draw(ctx, cell_layer, "Font Sizes", sub, NULL);
+      ui_menu_cell_basic_draw(ctx, cell_layer, "Font Sizes", sub, NULL);
       break;
     }
     case 4: {
@@ -869,7 +908,7 @@ static void prv_unlocks_draw_row(GContext *ctx, const Layer *cell_layer, MenuInd
       } else {
         snprintf(sub, sizeof(sub), "All 6 Unlocked");
       }
-      menu_cell_basic_draw(ctx, cell_layer, "Clock Styles", sub, NULL);
+      ui_menu_cell_basic_draw(ctx, cell_layer, "Clock Styles", sub, NULL);
       break;
     }
     default:
@@ -917,11 +956,12 @@ static void prv_unlocks_window_load(Window *window) {
     .select_click = prv_unlocks_select_callback,
   });
 
-  menu_layer_set_click_config_onto_window(s_unlocks_menu_layer, window);
+  ui_menu_bind_navigation(window, s_unlocks_menu_layer, &s_unlocks_nav_cfg, prv_unlocks_get_row_count);
   layer_add_child(window_layer, menu_layer_get_layer(s_unlocks_menu_layer));
 }
 
 static void prv_unlocks_window_unload(Window *window) {
+  ui_menu_unbind_navigation(&s_unlocks_nav_cfg);
   layer_destroy(s_unlocks_header_layer);
   s_unlocks_header_layer = NULL;
   menu_layer_destroy(s_unlocks_menu_layer);

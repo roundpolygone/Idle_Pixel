@@ -1,4 +1,4 @@
-#include "ui_grid.h"
+#include "ui.h"
 #include "game_state.h"
 
 static Layer *s_canvas_layer = NULL;

@@ -15,6 +15,7 @@ pebble_screenshot_*
 *.webp
 *.csv
 dev_*
+icon_test/
 .tempmediaStorage/
 .user_uploaded/
 

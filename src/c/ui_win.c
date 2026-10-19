@@ -1,4 +1,4 @@
-#include "ui_win.h"
+#include "ui.h"
 #include "game_state.h"
 
 #define NUM_FIREWORK_PARTICLES 45
@@ -16,7 +16,7 @@ typedef struct {
 static Window *s_win_window = NULL;
 static Layer *s_win_layer = NULL;
 static AppTimer *s_anim_timer = NULL;
-static Particle s_particles[NUM_FIREWORK_PARTICLES];
+static Particle *s_particles = NULL;
 static uint32_t s_anim_frames = 0;
 
 static const GColor s_bright_colors[] = {
@@ -32,6 +32,7 @@ static const GColor s_bright_colors[] = {
 };
 
 static void prv_spawn_burst(int16_t origin_x, int16_t origin_y, int start_idx, int count) {
+  if (!s_particles) return;
   for (int i = 0; i < count; i++) {
     int idx = start_idx + i;
     if (idx >= NUM_FIREWORK_PARTICLES) break;
@@ -48,6 +49,7 @@ static void prv_spawn_burst(int16_t origin_x, int16_t origin_y, int start_idx, i
 }
 
 static void prv_update_particles(GRect bounds) {
+  if (!s_particles) return;
   s_anim_frames++;
   if (s_anim_frames % 22 == 1) {
     int origin_x = (rand() % (bounds.size.w - 40)) + 20;
@@ -65,8 +67,6 @@ static void prv_update_particles(GRect bounds) {
     }
   }
 }
-
-#include "ui_save_slots.h"
 
 // -------------------------------------------------------------
 // Win Screen Update & Input
@@ -166,11 +166,13 @@ static void prv_win_update_proc(Layer *layer, GContext *ctx) {
                      NULL);
 
   // 3. Draw firework particles ON TOP of stats card overlay
-  for (int i = 0; i < NUM_FIREWORK_PARTICLES; i++) {
-    if (s_particles[i].life > 0) {
-      graphics_context_set_fill_color(ctx, s_particles[i].color);
-      int radius = (s_particles[i].life > 6) ? 2 : 1;
-      graphics_fill_circle(ctx, GPoint(s_particles[i].x, s_particles[i].y), radius);
+  if (s_particles) {
+    for (int i = 0; i < NUM_FIREWORK_PARTICLES; i++) {
+      if (s_particles[i].life > 0) {
+        graphics_context_set_fill_color(ctx, s_particles[i].color);
+        int radius = (s_particles[i].life > 6) ? 2 : 1;
+        graphics_fill_circle(ctx, GPoint(s_particles[i].x, s_particles[i].y), radius);
+      }
     }
   }
 }
@@ -229,9 +231,12 @@ static void prv_window_load(Window *window) {
   layer_set_update_proc(s_win_layer, prv_win_update_proc);
   layer_add_child(window_layer, s_win_layer);
 
-  memset(s_particles, 0, sizeof(s_particles));
-  s_anim_frames = 0;
-  prv_spawn_burst(bounds.size.w / 2, bounds.size.h / 3, 0, 20);
+  s_particles = malloc(sizeof(Particle) * NUM_FIREWORK_PARTICLES);
+  if (s_particles) {
+    memset(s_particles, 0, sizeof(Particle) * NUM_FIREWORK_PARTICLES);
+    s_anim_frames = 0;
+    prv_spawn_burst(bounds.size.w / 2, bounds.size.h / 3, 0, 20);
+  }
 
   s_anim_timer = app_timer_register(33, prv_anim_timer_callback, NULL);
   vibes_double_pulse();
@@ -241,6 +246,10 @@ static void prv_window_unload(Window *window) {
   if (s_anim_timer) {
     app_timer_cancel(s_anim_timer);
     s_anim_timer = NULL;
+  }
+  if (s_particles) {
+    free(s_particles);
+    s_particles = NULL;
   }
   layer_destroy(s_win_layer);
   s_win_layer = NULL;

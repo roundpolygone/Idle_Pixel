@@ -112,16 +112,15 @@ Idle 64 is structured into a multi-tiered incremental progression system: **Pixe
 ## 🌟 Menus & Systems
 
 ### Main Menu
-1. **Prestige**: Reset Colours & Pixels for upgraded cash payout and permanent +5% speed.
-2. **Store**: 13 data-driven store upgrades and crown perks.
+1. **Prestige**: Reset Colours & Pixels for upgraded cash payout and permanent +5% speed. Live preview displays colors completed and currency to be earned.
+2. **Store**: 14 data-driven store upgrades and crown perks with automatic marquee scrolling on longer titles.
 3. **Unlocks**: Unlockable background colors, fill orders, fonts, font sizes, and clock styles.
 4. **Clock**: Full-screen interactive clock face.
 5. **Options**: Global watch settings and preferences.
-6. **Save Slots**: Multi-slot save file management.
-7. *(Dev Menu)*: Ticker for quick debugging (if enabled).
+6. **Save Slots**: Dynamic multi-slot save manager supporting up to 64 saves.
 
 ### 🛒 Store Upgrades
-All upgrades feature declarative cost scaling and live stat formatters:
+All upgrades feature declarative cost scaling, live stat formatters, and marquee text scrolling:
 
 #### Standard Cents Upgrades (2.0x Cost Curve)
 1. **Auto-Fill Speed (+10%)**: Baseline interval compound reduction.
@@ -136,24 +135,28 @@ All upgrades feature declarative cost scaling and live stat formatters:
 10. **Layer Bonus (+1¢/row)**: Adds +1¢ per completed 8-pixel layer.
 
 #### Crown Perks (Persistent Across All Saves — 1 Crown Each)
-11. **👑 Auto Boost**: Fires 1 auto boost every 5 seconds (Max Level 1).
+11. **👑 Auto Boost**: Fires 1 auto boost on an interval. Purchasable 5 times, taking 1 second off the interval each level (5s down to 1s at Level 5).
 12. **👑 Clock Boost (+20%)**: +20% boost momentum while on the clock face per level.
 13. **👑 Starting Headstart**: +$0.50 starting bankroll for new runs in any save slot per level.
+14. **👑 Start Level**: Starts each cash upgrade item at +1 level each purchase after prestiging and on new saves.
 
-### 🎨 Cosmetic Unlocks (30 Total Items)
+### 🎨 Cosmetic Unlocks (36 Total Items)
 Spend unlock points earned from completing colours:
-- **Background Colors (13)**: Curated Pebble palette colorways with live preview swatches + default Auto Contrast.
+- **Background Colors (19)**: Curated Pebble palette colorways with live preview swatches + default Auto Contrast. Light and dark shades are interleaved evenly across contrasting hues (blues, purples, oranges, greens, reds).
 - **Fill Orders (7)**: Normal (default), Reverse, CW Spiral, CCW Spiral, Zig-Zag, Up and Down, Checkerboard, and Random.
 - **Fonts (3)**: Gothic (default), Bitham, Leco, and Roboto.
-- **Font Sizes (2)**: Small (default), Medium, Large.
-- **Clock Styles (5)**: Big Digital (default), Classic Analogue, Bold Minimalist, 7-Segment, Word Clock, and "Now" Clock.
+- **Font Sizes (2)**: Small (default), Medium, Large. Affects typography and structural elements across all clock styles:
+  - *Square Analogue*: Hand width and outer bezel border thickness scale with font size.
+  - *Bold Minimalist*: Dot radius, hand strokes, and border rim scale with font size.
+  - *7-Segment*: Digit heights scale dynamically with font size.
+- **Clock Styles (5)**: Big Digital (default), Square Analogue, Bold Minimalist, 7-Segment, Word Clock, and "Now" Clock.
 
 *Unlocks continue progressing while the game is closed. Winning a run automatically guarantees enough unlock points to unlock every cosmetic item in the game.*
 
 ### 💾 Save Slots & Global Persistence
-- **3 Enumerated Slots**: Displays start date, total play duration, and completion badges (`👑 Completed`). Includes **Load Slot**, **Overwrite Slot**, and **Clear Slot** actions.
-- **Safe Switching**: Loading saves uses `idle_pixel_pop_to_root()` to dismiss menus without exiting to the Pebble OS launcher.
-- **Global Settings**: Options (`Time Format`, `Seconds`, `Vibration`, `Tap to Wake`) and the **Crown Bank** are stored globally under `PERSIST_KEY_GLOBAL_CONFIG`, ensuring preferences and crown upgrades never reset when switching saves.
+- **Up to 64 Save Slots**: Top header displays slots used and total crowns earned/unspent. Lists existing saves with start date, playtime, win badges (`👑 Won`), and active indicator (`[Active]`), followed by a `[+] Add New Save` button.
+- **Safe Switching**: Loading saves uses `idle_pixel_pop_to_root()` to dismiss menus cleanly.
+- **Global Settings & Crown Bank**: Global options (`Time Format`, `Seconds`, `Vibration`, `Tap to Wake`) and the **Crown Bank** are stored globally under `PERSIST_KEY_GLOBAL_CONFIG`, ensuring crowns and crown perks persist across all saves and prestiges. Dev menu is disabled by default (`ENABLE_DEV_MENU 0`) for production releases.
 
 ---
 
