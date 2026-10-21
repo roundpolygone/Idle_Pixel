@@ -17,6 +17,7 @@
 
 #define SAVE_VERSION 14
 #define NUM_SAVE_SLOTS 64
+#define MAX_CROWNS_PER_SAVE 2
 #define PERSIST_KEY_GLOBAL_CONFIG 96
 #define PERSIST_KEY_GLOBAL_CROWNS 98
 #define PERSIST_KEY_GLOBAL_GOLD_PIXELS 98 // legacy alias
@@ -393,6 +394,7 @@ uint8_t game_state_get_start_level(void);
 bool game_state_buy_start_level(void);
 
 uint32_t game_state_get_global_crowns(void);
+uint32_t game_state_get_active_save_crowns(void);
 #if ENABLE_DEV_MENU
 void game_state_dev_add_crown(void);
 #define game_state_dev_add_gold_pixel game_state_dev_add_crown

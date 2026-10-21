@@ -104,7 +104,9 @@ static void prv_win_update_proc(Layer *layer, GContext *ctx) {
 
   // Title with crown
   graphics_context_set_text_color(ctx, GColorYellow);
-  graphics_draw_text(ctx, "\xF0\x9F\x91\x91 CROWN WON! \xF0\x9F\x91\x91",
+  const char *title_str = game->crown_just_earned ? "\xF0\x9F\x91\x91 CROWN WON! \xF0\x9F\x91\x91"
+                                                  : "\xF0\x9F\x91\x91 64 COLOURS! \xF0\x9F\x91\x91";
+  graphics_draw_text(ctx, title_str,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      GRect(card_x, card_y + 2, card_w, 20),
                      GTextOverflowModeWordWrap,

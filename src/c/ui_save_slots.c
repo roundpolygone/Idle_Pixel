@@ -199,10 +199,17 @@ static void prv_slots_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex
     uint32_t hours = mins / 60;
     mins = mins % 60;
 
-    if (info.is_completed) {
-      snprintf(sub_buf, sizeof(sub_buf), "\xF0\x9F\x91\x91 Crown Earned | %luh %lum", (unsigned long)hours, (unsigned long)mins);
+    uint32_t slot_crowns = info.crowns;
+    if (slot_crowns == 0 && info.is_completed) {
+      slot_crowns = 1;
+    }
+
+    if (slot_crowns >= MAX_CROWNS_PER_SAVE) {
+      snprintf(sub_buf, sizeof(sub_buf), "\xF0\x9F\x91\x91 2/2 (MAX) | %luh %lum", (unsigned long)hours, (unsigned long)mins);
+    } else if (slot_crowns == 1) {
+      snprintf(sub_buf, sizeof(sub_buf), "\xF0\x9F\x91\x91 1/2 Crown | %luh %lum", (unsigned long)hours, (unsigned long)mins);
     } else {
-      snprintf(sub_buf, sizeof(sub_buf), "No Crown | Time: %luh %lum", (unsigned long)hours, (unsigned long)mins);
+      snprintf(sub_buf, sizeof(sub_buf), "0/2 Crowns | %luh %lum", (unsigned long)hours, (unsigned long)mins);
     }
 
     ui_menu_cell_basic_draw(ctx, cell_layer, title_buf, sub_buf, NULL);

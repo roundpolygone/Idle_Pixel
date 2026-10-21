@@ -91,27 +91,38 @@ static void prv_apply_global_config_to_session(void) {
     prv_add_start_level_bonus(diff);
   }
   s_game.data.upgrade_start_level_lvl = s_global_data.upgrade_start_level_lvl;
-  s_game.data.crowns = s_global_data.crowns;
 }
 
 static void prv_award_crowns(uint32_t count) {
   if (count == 0) return;
-  s_game.crown_just_earned = true;
+
+  uint32_t earned_so_far = s_game.data.crowns;
+  uint32_t remaining = (earned_so_far < MAX_CROWNS_PER_SAVE) ? (MAX_CROWNS_PER_SAVE - earned_so_far) : 0;
+  uint32_t to_award = (count < remaining) ? count : remaining;
+
   s_game.data.is_completed = true;
-  s_game.data.completion_time_sec = s_game.data.active_play_sec + s_game.data.offline_play_sec;
+  if (s_game.data.completion_time_sec == 0) {
+    s_game.data.completion_time_sec = s_game.data.active_play_sec + s_game.data.offline_play_sec;
+  }
   s_game.win_just_triggered = true;
 
-  // Award crowns directly to the global crown bank whenever a game wins
-  s_global_data.total_crowns_earned += count;
-  uint32_t spent = game_state_get_total_crowns_spent();
-  if (s_global_data.total_crowns_earned >= spent) {
-    s_global_data.crowns = s_global_data.total_crowns_earned - spent;
+  if (to_award > 0) {
+    s_game.crown_just_earned = true;
+    s_game.data.crowns += to_award;
+
+    // Award crowns directly to the global crown bank whenever a game wins
+    s_global_data.total_crowns_earned += to_award;
+    uint32_t spent = game_state_get_total_crowns_spent();
+    if (s_global_data.total_crowns_earned >= spent) {
+      s_global_data.crowns = s_global_data.total_crowns_earned - spent;
+    } else {
+      s_global_data.total_crowns_earned = spent;
+      s_global_data.crowns = 0;
+    }
+    prv_save_global_config();
   } else {
-    s_global_data.total_crowns_earned = spent;
-    s_global_data.crowns = 0;
+    s_game.crown_just_earned = false;
   }
-  prv_save_global_config();
-  s_game.data.crowns = s_global_data.crowns;
 
   // Guarantee player has enough unlock points to unlock everything if it wins
   uint32_t total_unlocked = game_state_get_total_unlocks_count();
@@ -298,17 +309,34 @@ uint32_t game_state_get_total_crowns_spent(void) {
 static void prv_sanitize_crowns(void) {
   uint32_t spent = game_state_get_total_crowns_spent();
 
-  // Count legitimate completed runs across all save slots
-  uint32_t completed_slots = 0;
+  // Check all save slots and enforce max crowns per save
+  uint32_t total_slot_crowns = 0;
   for (uint8_t i = 0; i < NUM_SAVE_SLOTS; i++) {
     uint32_t k = prv_get_slot_key(i);
     if (persist_exists(k)) {
       GameSaveData d;
       int bytes = persist_read_data(k, &d, sizeof(GameSaveData));
-      if (bytes > 0 && d.is_completed) {
-        completed_slots++;
+      if (bytes > 0) {
+        bool slot_updated = false;
+        if (d.crowns > MAX_CROWNS_PER_SAVE) {
+          d.crowns = d.is_completed ? MAX_CROWNS_PER_SAVE : 0;
+          slot_updated = true;
+        } else if (d.is_completed && d.crowns == 0) {
+          d.crowns = 1;
+          slot_updated = true;
+        }
+        if (slot_updated) {
+          persist_write_data(k, &d, sizeof(GameSaveData));
+        }
+        total_slot_crowns += d.crowns;
       }
     }
+  }
+
+  if (s_game.data.crowns > MAX_CROWNS_PER_SAVE) {
+    s_game.data.crowns = s_game.data.is_completed ? MAX_CROWNS_PER_SAVE : 0;
+  } else if (s_game.data.is_completed && s_game.data.crowns == 0) {
+    s_game.data.crowns = 1;
   }
 
   // Detect corrupted crowns (e.g. thousands from struct alignment bug or underflow)
@@ -319,7 +347,7 @@ static void prv_sanitize_crowns(void) {
                     s_global_data.crowns > s_global_data.total_crowns_earned);
 
   if (corrupted) {
-    uint32_t legitimate_earned = (completed_slots > spent) ? completed_slots : spent;
+    uint32_t legitimate_earned = (total_slot_crowns > spent) ? total_slot_crowns : spent;
     s_global_data.total_crowns_earned = legitimate_earned;
     s_global_data.crowns = legitimate_earned - spent;
     prv_save_global_config();
@@ -333,8 +361,6 @@ static void prv_sanitize_crowns(void) {
     }
     prv_save_global_config();
   }
-
-  s_game.data.crowns = s_global_data.crowns;
 }
 
 bool game_state_spend_crowns(uint32_t count) {
@@ -343,7 +369,6 @@ bool game_state_spend_crowns(uint32_t count) {
   if (s_global_data.crowns >= count && s_global_data.total_crowns_earned >= spent + count) {
     s_global_data.crowns -= count;
     prv_save_global_config();
-    s_game.data.crowns = s_global_data.crowns;
     return true;
   }
   return false;
@@ -798,7 +823,7 @@ void game_state_get_slot_info(uint8_t slot_idx, SaveSlotInfo *out_info) {
     out_info->total_time_sec = s_game.data.active_play_sec + s_game.data.offline_play_sec;
     out_info->completion_time_sec = s_game.data.completion_time_sec;
     out_info->tier2_pixels = s_game.data.tier2_pixels;
-    out_info->crowns = s_global_data.crowns;
+    out_info->crowns = s_game.data.crowns;
     return;
   }
 
@@ -812,7 +837,7 @@ void game_state_get_slot_info(uint8_t slot_idx, SaveSlotInfo *out_info) {
       out_info->total_time_sec = slot_data.active_play_sec + slot_data.offline_play_sec;
       out_info->completion_time_sec = slot_data.completion_time_sec;
       out_info->tier2_pixels = slot_data.tier2_pixels;
-      out_info->crowns = s_global_data.crowns;
+      out_info->crowns = slot_data.crowns;
     }
   }
 }
@@ -824,7 +849,7 @@ static void prv_init_default_save_data(void) {
   s_game.data.current_color_idx = 0;
   s_game.data.tier2_pixels = 0;
   s_game.data.solid_grids_count = 0;
-  s_game.data.crowns = s_global_data.crowns;
+  s_game.data.crowns = 0;
   s_game.data.max_unlock_milestone = 0;
   s_game.data.progress_ms = 0;
   s_game.data.currency = game_state_get_starting_headstart_cents();
@@ -1969,12 +1994,18 @@ uint32_t game_state_get_global_crowns(void) {
   return s_global_data.crowns;
 }
 
+uint32_t game_state_get_active_save_crowns(void) {
+  return s_game.data.crowns;
+}
+
 #if ENABLE_DEV_MENU
 void game_state_dev_add_crown(void) {
   s_global_data.crowns += 1;
   s_global_data.total_crowns_earned += 1;
   prv_save_global_config();
-  s_game.data.crowns = s_global_data.crowns;
+  if (s_game.data.crowns < MAX_CROWNS_PER_SAVE) {
+    s_game.data.crowns += 1;
+  }
   game_state_save();
 }
 #endif
