@@ -1,7 +1,7 @@
 {
   "name": "Idle_64",
   "author": "MakeAwesomeHappen",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "keywords": ["pebble-app"],
   "private": true,
   "dependencies": {},
