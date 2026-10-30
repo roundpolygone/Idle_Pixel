@@ -16,6 +16,7 @@ typedef struct {
 static Window *s_win_window = NULL;
 static Layer *s_win_layer = NULL;
 static AppTimer *s_anim_timer = NULL;
+static AppTimer *s_auto_close_timer = NULL;
 static Particle *s_particles = NULL;
 static uint32_t s_anim_frames = 0;
 
@@ -226,6 +227,13 @@ static void prv_click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_DOWN, prv_new_save_click_handler);
 }
 
+static void prv_auto_close_timer_callback(void *context) {
+  s_auto_close_timer = NULL;
+  if (s_win_window) {
+    window_stack_pop(true);
+  }
+}
+
 static void prv_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
@@ -243,10 +251,17 @@ static void prv_window_load(Window *window) {
 
   uint32_t interval = game_state_get_power_saving() ? 1000 : 33;
   s_anim_timer = app_timer_register(interval, prv_anim_timer_callback, NULL);
+  if (game_state_get_auto_close_win()) {
+    s_auto_close_timer = app_timer_register(3000, prv_auto_close_timer_callback, NULL);
+  }
   game_state_vibe_double();
 }
 
 static void prv_window_unload(Window *window) {
+  if (s_auto_close_timer) {
+    app_timer_cancel(s_auto_close_timer);
+    s_auto_close_timer = NULL;
+  }
   if (s_anim_timer) {
     app_timer_cancel(s_anim_timer);
     s_anim_timer = NULL;

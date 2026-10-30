@@ -438,6 +438,16 @@ void ui_store_show(void) {
   window_stack_push(s_store_window, true);
 }
 
+void ui_store_refresh_if_visible(void) {
+  if (!s_store_window) return;
+  if (s_store_menu_layer) {
+    menu_layer_reload_data(s_store_menu_layer);
+  }
+  if (s_store_header_layer) {
+    layer_mark_dirty(s_store_header_layer);
+  }
+}
+
 // =============================================================
 // 3. Reset Confirmation Dialog
 // =============================================================
@@ -509,7 +519,7 @@ static void prv_show_reset_confirmation(void) {
 // 4. Options Submenu
 // =============================================================
 static uint16_t prv_options_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
-  return 5;
+  return 6;
 }
 
 static void prv_options_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -533,6 +543,10 @@ static void prv_options_draw_row(GContext *ctx, const Layer *cell_layer, MenuInd
                               game->data.option_power_saving ? "ON" : "OFF", NULL);
       break;
     case 4:
+      ui_menu_cell_basic_draw(ctx, cell_layer, "Auto-Close Win",
+                              game->data.option_auto_close_win ? "ON (3s)" : "OFF", NULL);
+      break;
+    case 5:
       ui_menu_cell_basic_draw(ctx, cell_layer, "Reset Game", "Wipe all data & restart", NULL);
       break;
     default:
@@ -570,6 +584,11 @@ static void prv_options_select_callback(MenuLayer *menu_layer, MenuIndex *cell_i
       menu_layer_reload_data(menu_layer);
       break;
     case 4:
+      game_state_set_auto_close_win(!game_state_get_auto_close_win());
+      game_state_weak_vibe();
+      menu_layer_reload_data(menu_layer);
+      break;
+    case 5:
       prv_show_reset_confirmation();
       break;
     default:
@@ -578,7 +597,7 @@ static void prv_options_select_callback(MenuLayer *menu_layer, MenuIndex *cell_i
 }
 
 static uint16_t prv_options_get_row_count(void) {
-  return 5;
+  return 6;
 }
 
 static void prv_options_window_load(Window *window) {

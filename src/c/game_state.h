@@ -39,6 +39,8 @@ typedef struct __attribute__((__packed__)) {
   uint8_t  upgrade_headstart_lvl;   // Crown item: +50¢ starting cash & speed
   uint8_t  upgrade_start_level_lvl; // Crown item: starts each upgrade at +1 lvl after prestige
   bool     option_power_saving;     // power saving mode (added at end to preserve offsets)
+  bool     option_auto_close_win;   // auto-close crown win page after 3s
+  uint8_t  upgrade_auto_buy_lvl;    // Crown item: auto-buy cheapest normal upgrade
 } GlobalAppData;
 
 // Unlockable cosmetics: 19 background colors, 7 fill orders, 3 fonts, 3 font sizes, 5 clock styles (36 total unlocks)
@@ -136,6 +138,8 @@ typedef struct __attribute__((__packed__)) {
   bool     is_used;                // Slot used flag
   uint64_t favourite_colors;       // 64-bit mask for favourite colors
   bool     option_power_saving;    // power saving mode (added at end to preserve offsets)
+  bool     option_auto_close_win;  // auto-close crown win page after 3s
+  uint8_t  upgrade_auto_buy_lvl;   // Crown item: auto-buy cheapest normal upgrade
 } GameSaveData;
 
 #define gold_pixels crowns
@@ -264,7 +268,6 @@ uint32_t game_state_calc_cost_2x(uint8_t level);
 typedef enum {
   UPGRADE_FILL_SPEED = 0,
   UPGRADE_BOOST_AMOUNT,
-  UPGRADE_BOOST_ACCEL,
   UPGRADE_BOOST_SUSTAIN,
   UPGRADE_BOOST_DIMINISH,
   UPGRADE_BOOST_LIMIT,
@@ -276,6 +279,7 @@ typedef enum {
   UPGRADE_CLOCK_BOOST,
   UPGRADE_STARTING_HEADSTART,
   UPGRADE_START_LEVEL,
+  UPGRADE_AUTO_BUY,
   UPGRADE_COUNT
 } UpgradeId;
 
@@ -366,6 +370,8 @@ void game_state_vibe_long(void);
 bool game_state_is_vibration_enabled(void);
 bool game_state_get_power_saving(void);
 void game_state_set_power_saving(bool enabled);
+bool game_state_get_auto_close_win(void);
+void game_state_set_auto_close_win(bool enabled);
 void game_state_cycle_bg_color(void);
 
 // New layer bonus upgrade
@@ -392,6 +398,8 @@ uint32_t game_state_get_starting_headstart_cents(void);
 bool game_state_buy_starting_headstart(void);
 uint8_t game_state_get_start_level(void);
 bool game_state_buy_start_level(void);
+uint32_t game_state_get_auto_buy_interval_ms(void);
+bool game_state_try_auto_buy_cheapest(void);
 
 uint32_t game_state_get_global_crowns(void);
 uint32_t game_state_get_active_save_crowns(void);

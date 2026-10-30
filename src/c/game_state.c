@@ -83,9 +83,11 @@ static void prv_apply_global_config_to_session(void) {
   s_game.data.option_vibration = s_global_data.option_vibration;
   s_game.data.option_tap_to_wake = s_global_data.option_tap_to_wake;
   s_game.data.option_power_saving = s_global_data.option_power_saving;
+  s_game.data.option_auto_close_win = s_global_data.option_auto_close_win;
   s_game.data.upgrade_auto_boost_lvl = s_global_data.upgrade_auto_boost_lvl;
   s_game.data.upgrade_clock_boost_lvl = s_global_data.upgrade_clock_boost_lvl;
   s_game.data.upgrade_headstart_lvl = s_global_data.upgrade_headstart_lvl;
+  s_game.data.upgrade_auto_buy_lvl = s_global_data.upgrade_auto_buy_lvl;
   if (s_global_data.upgrade_start_level_lvl > s_game.data.upgrade_start_level_lvl) {
     uint8_t diff = s_global_data.upgrade_start_level_lvl - s_game.data.upgrade_start_level_lvl;
     prv_add_start_level_bonus(diff);
@@ -196,7 +198,7 @@ static const uint32_t s_boost_max_limit_table[16] = {
 uint32_t game_state_get_boost_max_limit_percent(void) {
   uint8_t lvl = s_game.data.upgrade_boost_limit_lvl;
   if (lvl < 16) return s_boost_max_limit_table[lvl];
-  return 300;
+  return 300 + ((uint32_t)(lvl - 15) * 25);
 }
 
 uint32_t game_state_get_current_boost_percent(void) {
@@ -300,10 +302,13 @@ uint32_t game_state_get_total_crowns_earned(void) {
 uint32_t game_state_get_total_crowns_spent(void) {
   uint32_t start_lvl = s_global_data.upgrade_start_level_lvl;
   uint32_t start_lvl_crowns = (start_lvl * (start_lvl + 1)) / 2;
+  uint32_t auto_buy_lvl = s_global_data.upgrade_auto_buy_lvl;
+  uint32_t auto_buy_crowns = (auto_buy_lvl * (auto_buy_lvl + 1)) / 2;
   return (uint32_t)s_global_data.upgrade_auto_boost_lvl +
          (uint32_t)s_global_data.upgrade_clock_boost_lvl +
          (uint32_t)s_global_data.upgrade_headstart_lvl +
-         start_lvl_crowns;
+         start_lvl_crowns +
+         auto_buy_crowns;
 }
 
 static void prv_sanitize_crowns(void) {
@@ -459,11 +464,6 @@ static void prv_fmt_stat_boost_amount(char *buf, size_t buf_size) {
   snprintf(buf, buf_size, "+%lu%%", (unsigned long)boost_amt);
 }
 
-static void prv_fmt_stat_boost_accel(char *buf, size_t buf_size) {
-  uint32_t accel = game_state_get_boost_accel_percent_per_sec();
-  snprintf(buf, buf_size, "+%lu%%/s", (unsigned long)accel);
-}
-
 static void prv_fmt_stat_boost_sustain(char *buf, size_t buf_size) {
   uint32_t sustain_ms = game_state_get_boost_sustain_ms();
   snprintf(buf, buf_size, "%lus", (unsigned long)(sustain_ms / 1000));
@@ -535,6 +535,17 @@ static void prv_fmt_stat_start_level(char *buf, size_t buf_size) {
   snprintf(buf, buf_size, "+%u Extra Lvl", (unsigned int)lvl);
 }
 
+static void prv_fmt_stat_auto_buy(char *buf, size_t buf_size) {
+  uint32_t interval_ms = game_state_get_auto_buy_interval_ms();
+  if (interval_ms == 0) {
+    snprintf(buf, buf_size, "1 buy / 20.0s");
+  } else {
+    snprintf(buf, buf_size, "1 buy / %lu.%lus",
+             (unsigned long)(interval_ms / 1000),
+             (unsigned long)((interval_ms % 1000) / 100));
+  }
+}
+
 typedef void (*UpgradeFormatStatFunc)(char *buf, size_t buf_size);
 
 typedef struct {
@@ -562,14 +573,6 @@ static const UpgradeDef s_upgrades[UPGRADE_COUNT] = {
     .currency_type = CURRENCY_TYPE_CENTS,
     .max_level = 0,
     .format_stat = prv_fmt_stat_boost_amount
-  },
-  [UPGRADE_BOOST_ACCEL] = {
-    .title = "Boost Acc (+10%/s)",
-    .level_offset = offsetof(GameSaveData, upgrade_boost_accel_lvl),
-    .curve_type = COST_CURVE_2X,
-    .currency_type = CURRENCY_TYPE_CENTS,
-    .max_level = 0,
-    .format_stat = prv_fmt_stat_boost_accel
   },
   [UPGRADE_BOOST_SUSTAIN] = {
     .title = "Boost Sustain (+1s)",
@@ -656,8 +659,16 @@ static const UpgradeDef s_upgrades[UPGRADE_COUNT] = {
     .level_offset = offsetof(GameSaveData, upgrade_start_level_lvl),
     .curve_type = COST_CURVE_CROWN_PROGRESSIVE,
     .currency_type = CURRENCY_TYPE_CROWNS,
-    .max_level = 5,
+    .max_level = 0,
     .format_stat = prv_fmt_stat_start_level
+  },
+  [UPGRADE_AUTO_BUY] = {
+    .title = "👑 Auto Buy (-10% Time)",
+    .level_offset = offsetof(GameSaveData, upgrade_auto_buy_lvl),
+    .curve_type = COST_CURVE_CROWN_PROGRESSIVE,
+    .currency_type = CURRENCY_TYPE_CROWNS,
+    .max_level = 0,
+    .format_stat = prv_fmt_stat_auto_buy
   }
 };
 
@@ -667,6 +678,7 @@ uint8_t game_state_get_upgrade_level(UpgradeId id) {
   if (id == UPGRADE_CLOCK_BOOST) return s_global_data.upgrade_clock_boost_lvl;
   if (id == UPGRADE_STARTING_HEADSTART) return s_global_data.upgrade_headstart_lvl;
   if (id == UPGRADE_START_LEVEL) return s_global_data.upgrade_start_level_lvl;
+  if (id == UPGRADE_AUTO_BUY) return s_global_data.upgrade_auto_buy_lvl;
   const UpgradeDef *def = &s_upgrades[id];
   const uint8_t *lvl_ptr = (const uint8_t*)(((const uint8_t*)&s_game.data) + def->level_offset);
   return *lvl_ptr;
@@ -726,6 +738,9 @@ bool game_state_buy_upgrade(UpgradeId id) {
       } else if (id == UPGRADE_START_LEVEL) {
         s_global_data.upgrade_start_level_lvl++;
         prv_apply_global_config_to_session();
+      } else if (id == UPGRADE_AUTO_BUY) {
+        s_global_data.upgrade_auto_buy_lvl++;
+        *lvl_ptr = s_global_data.upgrade_auto_buy_lvl;
       } else {
         (*lvl_ptr)++;
       }
@@ -785,7 +800,7 @@ void game_state_format_upgrade_sub(UpgradeId id, char *buf, size_t buf_size) {
 // Legacy cost helpers forwarding to unified engine
 uint32_t game_state_get_fill_speed_cost(void) { return game_state_get_upgrade_cost(UPGRADE_FILL_SPEED); }
 uint32_t game_state_get_boost_amount_cost(void) { return game_state_get_upgrade_cost(UPGRADE_BOOST_AMOUNT); }
-uint32_t game_state_get_boost_accel_cost(void) { return game_state_get_upgrade_cost(UPGRADE_BOOST_ACCEL); }
+uint32_t game_state_get_boost_accel_cost(void) { return 0; }
 uint32_t game_state_get_boost_sustain_cost(void) { return game_state_get_upgrade_cost(UPGRADE_BOOST_SUSTAIN); }
 uint32_t game_state_get_boost_diminish_cost(void) { return game_state_get_upgrade_cost(UPGRADE_BOOST_DIMINISH); }
 uint32_t game_state_get_boost_limit_cost(void) { return game_state_get_upgrade_cost(UPGRADE_BOOST_LIMIT); }
@@ -870,6 +885,7 @@ static void prv_init_default_save_data(void) {
   s_game.data.upgrade_clock_boost_lvl = s_global_data.upgrade_clock_boost_lvl;
   s_game.data.upgrade_headstart_lvl = s_global_data.upgrade_headstart_lvl;
   s_game.data.upgrade_start_level_lvl = s_global_data.upgrade_start_level_lvl;
+  s_game.data.upgrade_auto_buy_lvl = s_global_data.upgrade_auto_buy_lvl;
   s_game.data.crown_spent = false;
   s_game.data.unlocked_bg_colors = 1;
   s_game.data.selected_bg_color_index = BG_COLOR_AUTO;
@@ -887,6 +903,7 @@ static void prv_init_default_save_data(void) {
   s_game.data.option_show_seconds = s_global_data.option_show_seconds;
   s_game.data.option_tap_to_wake = s_global_data.option_tap_to_wake;
   s_game.data.option_power_saving = s_global_data.option_power_saving;
+  s_game.data.option_auto_close_win = s_global_data.option_auto_close_win;
   s_game.data.last_save_time = time(NULL);
   s_game.data.date_started = time(NULL);
   s_game.data.active_play_sec = 0;
@@ -1007,6 +1024,7 @@ void game_state_init(void) {
     s_global_data.option_vibration = true;
     s_global_data.option_tap_to_wake = true;
     s_global_data.option_power_saving = false;
+    s_global_data.option_auto_close_win = false;
     if (persist_exists(PERSIST_KEY_GLOBAL_CROWNS)) {
       s_global_data.crowns = (uint32_t)persist_read_int(PERSIST_KEY_GLOBAL_CROWNS);
       s_global_data.total_crowns_earned = s_global_data.crowns;
@@ -1035,6 +1053,10 @@ void game_state_init(void) {
         }
         if (d.upgrade_start_level_lvl > s_global_data.upgrade_start_level_lvl) {
           s_global_data.upgrade_start_level_lvl = d.upgrade_start_level_lvl;
+          global_upgrades_migrated = true;
+        }
+        if (d.upgrade_auto_buy_lvl > s_global_data.upgrade_auto_buy_lvl) {
+          s_global_data.upgrade_auto_buy_lvl = d.upgrade_auto_buy_lvl;
           global_upgrades_migrated = true;
         }
       }
@@ -1238,6 +1260,7 @@ void game_state_save(void) {
   s_global_data.option_vibration = s_game.data.option_vibration;
   s_global_data.option_tap_to_wake = s_game.data.option_tap_to_wake;
   s_global_data.option_power_saving = s_game.data.option_power_saving;
+  s_global_data.option_auto_close_win = s_game.data.option_auto_close_win;
   if (s_game.data.upgrade_auto_boost_lvl > s_global_data.upgrade_auto_boost_lvl) {
     s_global_data.upgrade_auto_boost_lvl = s_game.data.upgrade_auto_boost_lvl;
   }
@@ -1249,6 +1272,9 @@ void game_state_save(void) {
   }
   if (s_game.data.upgrade_start_level_lvl > s_global_data.upgrade_start_level_lvl) {
     s_global_data.upgrade_start_level_lvl = s_game.data.upgrade_start_level_lvl;
+  }
+  if (s_game.data.upgrade_auto_buy_lvl > s_global_data.upgrade_auto_buy_lvl) {
+    s_global_data.upgrade_auto_buy_lvl = s_game.data.upgrade_auto_buy_lvl;
   }
   prv_save_global_config();
 
@@ -1280,6 +1306,7 @@ void game_state_hard_reset(void) {
   s_global_data.option_vibration = true;
   s_global_data.option_tap_to_wake = true;
   s_global_data.option_power_saving = false;
+  s_global_data.option_auto_close_win = false;
   prv_save_global_config();
 
   // Automatically start a save in the first slot
@@ -1572,12 +1599,50 @@ bool game_state_buy_start_level(void) {
   return game_state_buy_upgrade(UPGRADE_START_LEVEL);
 }
 
+uint32_t game_state_get_auto_buy_interval_ms(void) {
+  uint8_t lvl = game_state_get_upgrade_level(UPGRADE_AUTO_BUY);
+  if (lvl == 0) return 0;
+  uint32_t interval_ms = 20000;
+  for (uint8_t i = 1; i < lvl; i++) {
+    interval_ms = (interval_ms * 9) / 10;
+    if (interval_ms < 100) {
+      interval_ms = 100;
+      break;
+    }
+  }
+  return interval_ms;
+}
+
+bool game_state_try_auto_buy_cheapest(void) {
+  if (game_state_get_upgrade_level(UPGRADE_AUTO_BUY) == 0) return false;
+
+  UpgradeId cheapest_id = UPGRADE_COUNT;
+  uint32_t min_cost = 0xFFFFFFFFUL;
+
+  for (uint8_t i = 0; i < UPGRADE_COUNT; i++) {
+    UpgradeId id = (UpgradeId)i;
+    if (game_state_get_upgrade_currency_type(id) != CURRENCY_TYPE_CENTS) continue;
+    if (game_state_is_upgrade_maxed(id)) continue;
+
+    uint32_t cost = game_state_get_upgrade_cost(id);
+    if (cheapest_id == UPGRADE_COUNT || cost < min_cost) {
+      cheapest_id = id;
+      min_cost = cost;
+    }
+  }
+
+  if (cheapest_id != UPGRADE_COUNT && s_game.data.currency >= min_cost) {
+    return game_state_buy_upgrade(cheapest_id);
+  }
+  return false;
+}
+
 // -------------------------------------------------------------
 // Store Upgrades (Legacy Wrappers)
 // -------------------------------------------------------------
 bool game_state_buy_fill_speed(void) { return game_state_buy_upgrade(UPGRADE_FILL_SPEED); }
 bool game_state_buy_boost_amount(void) { return game_state_buy_upgrade(UPGRADE_BOOST_AMOUNT); }
-bool game_state_buy_boost_accel(void) { return game_state_buy_upgrade(UPGRADE_BOOST_ACCEL); }
+bool game_state_buy_boost_accel(void) { return false; }
 bool game_state_buy_boost_sustain(void) { return game_state_buy_upgrade(UPGRADE_BOOST_SUSTAIN); }
 bool game_state_buy_boost_diminish(void) { return game_state_buy_upgrade(UPGRADE_BOOST_DIMINISH); }
 bool game_state_buy_boost_limit(void) { return game_state_buy_upgrade(UPGRADE_BOOST_LIMIT); }
@@ -1928,6 +1993,16 @@ bool game_state_get_power_saving(void) {
 void game_state_set_power_saving(bool enabled) {
   s_game.data.option_power_saving = enabled;
   s_global_data.option_power_saving = enabled;
+  game_state_save();
+}
+
+bool game_state_get_auto_close_win(void) {
+  return s_game.data.option_auto_close_win;
+}
+
+void game_state_set_auto_close_win(bool enabled) {
+  s_game.data.option_auto_close_win = enabled;
+  s_global_data.option_auto_close_win = enabled;
   game_state_save();
 }
 

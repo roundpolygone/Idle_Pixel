@@ -40,6 +40,7 @@ void ui_menu_cell_basic_draw(GContext *ctx, const Layer *cell_layer, const char 
 
 void ui_menu_show(void);
 void ui_store_show(void);
+void ui_store_refresh_if_visible(void);
 void ui_options_show(void);
 
 // Unlocks & Cosmetics

@@ -66,6 +66,19 @@ static void prv_timer_callback(void *data) {
     }
   }
 
+  // Handle Crown Auto Buy (buys cheapest normal upgrade every 20s, -10% per level)
+  uint32_t auto_buy_interval = game_state_get_auto_buy_interval_ms();
+  if (auto_buy_interval > 0) {
+    static uint32_t s_auto_buy_timer_ms = 0;
+    s_auto_buy_timer_ms += tick_interval;
+    if (s_auto_buy_timer_ms >= auto_buy_interval) {
+      s_auto_buy_timer_ms = 0;
+      if (game_state_try_auto_buy_cheapest()) {
+        ui_store_refresh_if_visible();
+      }
+    }
+  }
+
   game_state_tick(tick_interval, &pixel_added, &fill_completed);
 
   if (fill_completed) {
