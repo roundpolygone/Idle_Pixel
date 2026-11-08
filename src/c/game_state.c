@@ -54,6 +54,57 @@ void game_state_format_currency(uint32_t cents, char *buf, size_t buf_size) {
 static GlobalAppData s_global_data;
 static uint32_t prv_get_slot_key(uint8_t slot_idx);
 
+typedef struct __attribute__((__packed__)) {
+  uint16_t count;
+  uint16_t total_runs_archived;
+} ArchiveMeta;
+
+static ArchiveMeta s_archive_meta;
+static ArchivedSaveEntry s_archived_saves[MAX_ARCHIVED_SAVES];
+
+static void prv_save_archives(void) {
+  persist_write_data(PERSIST_KEY_ARCHIVE_META, &s_archive_meta, sizeof(ArchiveMeta));
+  persist_write_data(PERSIST_KEY_ARCHIVE_PART1, &s_archived_saves[0], sizeof(ArchivedSaveEntry) * 32);
+  persist_write_data(PERSIST_KEY_ARCHIVE_PART2, &s_archived_saves[32], sizeof(ArchivedSaveEntry) * 32);
+}
+
+static void prv_load_archives(void) {
+  memset(&s_archive_meta, 0, sizeof(ArchiveMeta));
+  memset(s_archived_saves, 0, sizeof(s_archived_saves));
+  if (persist_exists(PERSIST_KEY_ARCHIVE_META)) {
+    persist_read_data(PERSIST_KEY_ARCHIVE_META, &s_archive_meta, sizeof(ArchiveMeta));
+    if (s_archive_meta.count > MAX_ARCHIVED_SAVES) {
+      s_archive_meta.count = MAX_ARCHIVED_SAVES;
+    }
+    if (s_archive_meta.total_runs_archived < s_archive_meta.count) {
+      s_archive_meta.total_runs_archived = s_archive_meta.count;
+    }
+    if (persist_exists(PERSIST_KEY_ARCHIVE_PART1)) {
+      persist_read_data(PERSIST_KEY_ARCHIVE_PART1, &s_archived_saves[0], sizeof(ArchivedSaveEntry) * 32);
+    }
+    if (persist_exists(PERSIST_KEY_ARCHIVE_PART2)) {
+      persist_read_data(PERSIST_KEY_ARCHIVE_PART2, &s_archived_saves[32], sizeof(ArchivedSaveEntry) * 32);
+    }
+  }
+}
+
+static void prv_record_archived_save(uint32_t total_time_sec, uint32_t crowns) {
+  s_archive_meta.total_runs_archived++;
+  ArchivedSaveEntry entry = {
+    .total_time_sec = total_time_sec,
+    .crowns = (crowns > 65535UL) ? (uint16_t)65535U : (uint16_t)crowns,
+    .run_number = s_archive_meta.total_runs_archived
+  };
+
+  if (s_archive_meta.count < MAX_ARCHIVED_SAVES) {
+    s_archived_saves[s_archive_meta.count++] = entry;
+  } else {
+    memmove(&s_archived_saves[0], &s_archived_saves[1], sizeof(ArchivedSaveEntry) * (MAX_ARCHIVED_SAVES - 1));
+    s_archived_saves[MAX_ARCHIVED_SAVES - 1] = entry;
+  }
+  prv_save_archives();
+}
+
 static void prv_save_global_config(void) {
   persist_write_data(PERSIST_KEY_GLOBAL_CONFIG, &s_global_data, sizeof(GlobalAppData));
   persist_write_int(PERSIST_KEY_GLOBAL_CROWNS, (int32_t)s_global_data.crowns);
@@ -86,8 +137,14 @@ static void prv_apply_global_config_to_session(void) {
   s_game.data.option_auto_close_win = s_global_data.option_auto_close_win;
   s_game.data.upgrade_auto_boost_lvl = s_global_data.upgrade_auto_boost_lvl;
   s_game.data.upgrade_clock_boost_lvl = s_global_data.upgrade_clock_boost_lvl;
-  s_game.data.upgrade_headstart_lvl = s_global_data.upgrade_headstart_lvl;
   s_game.data.upgrade_auto_buy_lvl = s_global_data.upgrade_auto_buy_lvl;
+  if (s_global_data.upgrade_headstart_lvl > s_game.data.upgrade_headstart_lvl) {
+    uint8_t diff = s_global_data.upgrade_headstart_lvl - s_game.data.upgrade_headstart_lvl;
+    uint32_t bonus = (uint32_t)diff * STARTING_HEADSTART_CENTS_PER_LVL;
+    s_game.data.currency += bonus;
+    s_game.data.total_currency_earned += bonus;
+  }
+  s_game.data.upgrade_headstart_lvl = s_global_data.upgrade_headstart_lvl;
   if (s_global_data.upgrade_start_level_lvl > s_game.data.upgrade_start_level_lvl) {
     uint8_t diff = s_global_data.upgrade_start_level_lvl - s_game.data.upgrade_start_level_lvl;
     prv_add_start_level_bonus(diff);
@@ -98,33 +155,15 @@ static void prv_apply_global_config_to_session(void) {
 static void prv_award_crowns(uint32_t count) {
   if (count == 0) return;
 
-  uint32_t earned_so_far = s_game.data.crowns;
-  uint32_t remaining = (earned_so_far < MAX_CROWNS_PER_SAVE) ? (MAX_CROWNS_PER_SAVE - earned_so_far) : 0;
-  uint32_t to_award = (count < remaining) ? count : remaining;
-
   s_game.data.is_completed = true;
   if (s_game.data.completion_time_sec == 0) {
     s_game.data.completion_time_sec = s_game.data.active_play_sec + s_game.data.offline_play_sec;
   }
   s_game.win_just_triggered = true;
+  s_game.crown_just_earned = true;
 
-  if (to_award > 0) {
-    s_game.crown_just_earned = true;
-    s_game.data.crowns += to_award;
-
-    // Award crowns directly to the global crown bank whenever a game wins
-    s_global_data.total_crowns_earned += to_award;
-    uint32_t spent = game_state_get_total_crowns_spent();
-    if (s_global_data.total_crowns_earned >= spent) {
-      s_global_data.crowns = s_global_data.total_crowns_earned - spent;
-    } else {
-      s_global_data.total_crowns_earned = spent;
-      s_global_data.crowns = 0;
-    }
-    prv_save_global_config();
-  } else {
-    s_game.crown_just_earned = false;
-  }
+  // Crowns are collected in the active save and released to the usable bank when starting a new save
+  s_game.data.crowns += count;
 
   // Guarantee player has enough unlock points to unlock everything if it wins
   uint32_t total_unlocked = game_state_get_total_unlocks_count();
@@ -314,56 +353,18 @@ uint32_t game_state_get_total_crowns_spent(void) {
 static void prv_sanitize_crowns(void) {
   uint32_t spent = game_state_get_total_crowns_spent();
 
-  // Check all save slots and enforce max crowns per save
-  uint32_t total_slot_crowns = 0;
-  for (uint8_t i = 0; i < NUM_SAVE_SLOTS; i++) {
-    uint32_t k = prv_get_slot_key(i);
-    if (persist_exists(k)) {
-      GameSaveData d;
-      int bytes = persist_read_data(k, &d, sizeof(GameSaveData));
-      if (bytes > 0) {
-        bool slot_updated = false;
-        if (d.crowns > MAX_CROWNS_PER_SAVE) {
-          d.crowns = d.is_completed ? MAX_CROWNS_PER_SAVE : 0;
-          slot_updated = true;
-        } else if (d.is_completed && d.crowns == 0) {
-          d.crowns = 1;
-          slot_updated = true;
-        }
-        if (slot_updated) {
-          persist_write_data(k, &d, sizeof(GameSaveData));
-        }
-        total_slot_crowns += d.crowns;
-      }
-    }
-  }
-
-  if (s_game.data.crowns > MAX_CROWNS_PER_SAVE) {
-    s_game.data.crowns = s_game.data.is_completed ? MAX_CROWNS_PER_SAVE : 0;
-  } else if (s_game.data.is_completed && s_game.data.crowns == 0) {
-    s_game.data.crowns = 1;
-  }
-
-  // Detect corrupted crowns (e.g. thousands from struct alignment bug or underflow)
-  // or mathematical inconsistency where available crowns exceeds total crowns earned
-  bool corrupted = (s_global_data.crowns > 100 ||
-                    s_global_data.total_crowns_earned > 100 ||
+  // Detect corrupted crowns (e.g. from struct alignment or underflow)
+  bool corrupted = (s_global_data.crowns > 100000 ||
+                    s_global_data.total_crowns_earned > 100000 ||
                     s_global_data.total_crowns_earned < spent ||
                     s_global_data.crowns > s_global_data.total_crowns_earned);
 
   if (corrupted) {
-    uint32_t legitimate_earned = (total_slot_crowns > spent) ? total_slot_crowns : spent;
-    s_global_data.total_crowns_earned = legitimate_earned;
-    s_global_data.crowns = legitimate_earned - spent;
+    s_global_data.total_crowns_earned = spent;
+    s_global_data.crowns = 0;
     prv_save_global_config();
   } else {
-    // Enforce invariant: available crowns == total_crowns_earned - spent
-    if (s_global_data.total_crowns_earned >= spent) {
-      s_global_data.crowns = s_global_data.total_crowns_earned - spent;
-    } else {
-      s_global_data.total_crowns_earned = spent;
-      s_global_data.crowns = 0;
-    }
+    s_global_data.crowns = s_global_data.total_crowns_earned - spent;
     prv_save_global_config();
   }
 }
@@ -524,7 +525,7 @@ static void prv_fmt_stat_clock_boost(char *buf, size_t buf_size) {
 }
 
 static void prv_fmt_stat_headstart(char *buf, size_t buf_size) {
-  uint32_t bonus_cents = (uint32_t)game_state_get_upgrade_level(UPGRADE_STARTING_HEADSTART) * 50;
+  uint32_t bonus_cents = (uint32_t)game_state_get_upgrade_level(UPGRADE_STARTING_HEADSTART) * STARTING_HEADSTART_CENTS_PER_LVL;
   char cur_str[24];
   game_state_format_currency(bonus_cents, cur_str, sizeof(cur_str));
   snprintf(buf, buf_size, "+%s Start", cur_str);
@@ -734,7 +735,7 @@ bool game_state_buy_upgrade(UpgradeId id) {
         *lvl_ptr = s_global_data.upgrade_clock_boost_lvl;
       } else if (id == UPGRADE_STARTING_HEADSTART) {
         s_global_data.upgrade_headstart_lvl++;
-        *lvl_ptr = s_global_data.upgrade_headstart_lvl;
+        prv_apply_global_config_to_session();
       } else if (id == UPGRADE_START_LEVEL) {
         s_global_data.upgrade_start_level_lvl++;
         prv_apply_global_config_to_session();
@@ -810,7 +811,7 @@ uint32_t game_state_get_offline_speed_cost(void) { return game_state_get_upgrade
 uint32_t game_state_get_layer_bonus_cost(void) { return game_state_get_upgrade_cost(UPGRADE_LAYER_BONUS); }
 uint32_t game_state_get_auto_boost_cost_crowns(void) { return game_state_get_upgrade_cost(UPGRADE_AUTO_BOOST); }
 uint32_t game_state_get_clock_boost_cost_crowns(void) { return game_state_get_upgrade_cost(UPGRADE_CLOCK_BOOST); }
-uint32_t game_state_get_starting_headstart_cents(void) { return (uint32_t)game_state_get_upgrade_level(UPGRADE_STARTING_HEADSTART) * 50; }
+uint32_t game_state_get_starting_headstart_cents(void) { return (uint32_t)game_state_get_upgrade_level(UPGRADE_STARTING_HEADSTART) * STARTING_HEADSTART_CENTS_PER_LVL; }
 bool game_state_buy_starting_headstart(void) { return game_state_buy_upgrade(UPGRADE_STARTING_HEADSTART); }
 
 // -------------------------------------------------------------
@@ -868,6 +869,7 @@ static void prv_init_default_save_data(void) {
   s_game.data.max_unlock_milestone = 0;
   s_game.data.progress_ms = 0;
   s_game.data.currency = game_state_get_starting_headstart_cents();
+  s_game.data.total_currency_earned = s_game.data.currency;
   s_game.data.prestige_level = 0;
   s_game.data.unlock_points = 0;
   uint8_t start_lvl = s_global_data.upgrade_start_level_lvl;
@@ -983,17 +985,39 @@ bool game_state_clear_slot(uint8_t slot_idx) {
 }
 
 bool game_state_start_new_run_in_slot(uint8_t slot_idx) {
-  if (slot_idx >= NUM_SAVE_SLOTS) return false;
-  game_state_save();
+  (void)slot_idx;
+  game_state_archive_and_start_new_run();
+  return true;
+}
 
-  s_game.active_slot = slot_idx;
-  persist_write_int(PERSIST_KEY_ACTIVE_SLOT, slot_idx);
+void game_state_archive_and_start_new_run(void) {
+  // 1. Release pending crowns from current save into the global usable crown stock
+  if (s_game.data.crowns > 0) {
+    s_global_data.total_crowns_earned += s_game.data.crowns;
+    uint32_t spent = game_state_get_total_crowns_spent();
+    if (s_global_data.total_crowns_earned >= spent) {
+      s_global_data.crowns = s_global_data.total_crowns_earned - spent;
+    } else {
+      s_global_data.total_crowns_earned = spent + s_game.data.crowns;
+      s_global_data.crowns = s_game.data.crowns;
+    }
+    prv_save_global_config();
+  }
+
+  // 2. Archive the previous save in condensed format
+  uint32_t total_time_sec = s_game.data.active_play_sec + s_game.data.offline_play_sec;
+  prv_record_archived_save(total_time_sec, s_game.data.crowns);
+
+  // 3. Start a new run in slot 0
+  s_game.active_slot = 0;
+  persist_write_int(PERSIST_KEY_ACTIVE_SLOT, 0);
 
   prv_init_default_save_data();
   s_game.data.is_used = true;
   prv_apply_global_config_to_session();
   s_game.data.currency = game_state_get_starting_headstart_cents();
-  game_state_save_to_slot(slot_idx);
+  s_game.data.total_currency_earned = s_game.data.currency;
+  game_state_save_to_slot(0);
 
   s_game.current_boost_milli = 0;
   s_game.target_boost_milli = 0;
@@ -1006,12 +1030,27 @@ bool game_state_start_new_run_in_slot(uint8_t slot_idx) {
   s_game.transition_anim_running = false;
   s_game.preview_background_pixels = 0;
   prv_shuffle_random_order();
+}
+
+uint16_t game_state_get_archived_count(void) {
+  return s_archive_meta.count;
+}
+
+bool game_state_get_archived_save(uint16_t index, ArchivedSaveEntry *out_entry) {
+  if (!out_entry || index >= s_archive_meta.count) return false;
+  // Index 0 returns the most recently archived run (newest first)
+  *out_entry = s_archived_saves[s_archive_meta.count - 1 - index];
   return true;
+}
+
+uint16_t game_state_get_current_run_number(void) {
+  return (uint16_t)(s_archive_meta.total_runs_archived + 1);
 }
 
 void game_state_init(void) {
   memset(&s_game, 0, sizeof(GameState));
   prv_shuffle_random_order();
+  prv_load_archives();
 
   if (persist_exists(PERSIST_KEY_GLOBAL_CONFIG)) {
     memset(&s_global_data, 0, sizeof(GlobalAppData));
@@ -1148,6 +1187,25 @@ void game_state_init(void) {
       loaded = true;
       persist_write_data(active_key, &s_game.data, sizeof(GameSaveData));
     }
+  }
+
+  // Migrate any legacy non-active used slots into condensed archived runs
+  for (uint8_t i = 0; i < NUM_SAVE_SLOTS; i++) {
+    if (i == active_slot) continue;
+    uint32_t k = prv_get_slot_key(i);
+    if (persist_exists(k)) {
+      GameSaveData d;
+      if (persist_read_data(k, &d, sizeof(GameSaveData)) > 0 && d.is_used) {
+        prv_record_archived_save(d.active_play_sec + d.offline_play_sec, d.crowns);
+      }
+      persist_delete(k);
+    }
+  }
+  if (loaded && active_slot != 0) {
+    s_game.active_slot = 0;
+    persist_write_int(PERSIST_KEY_ACTIVE_SLOT, 0);
+    persist_write_data(prv_get_slot_key(0), &s_game.data, sizeof(GameSaveData));
+    persist_delete(active_key);
   }
 
   if (!loaded) {
@@ -1299,6 +1357,17 @@ void game_state_hard_reset(void) {
   if (persist_exists(PERSIST_KEY_GLOBAL_CONFIG)) {
     persist_delete(PERSIST_KEY_GLOBAL_CONFIG);
   }
+  if (persist_exists(PERSIST_KEY_ARCHIVE_META)) {
+    persist_delete(PERSIST_KEY_ARCHIVE_META);
+  }
+  if (persist_exists(PERSIST_KEY_ARCHIVE_PART1)) {
+    persist_delete(PERSIST_KEY_ARCHIVE_PART1);
+  }
+  if (persist_exists(PERSIST_KEY_ARCHIVE_PART2)) {
+    persist_delete(PERSIST_KEY_ARCHIVE_PART2);
+  }
+  memset(&s_archive_meta, 0, sizeof(ArchiveMeta));
+  memset(s_archived_saves, 0, sizeof(s_archived_saves));
   memset(&s_global_data, 0, sizeof(GlobalAppData));
   s_global_data.version = 1;
   s_global_data.option_24h = false;
@@ -1568,6 +1637,9 @@ uint32_t game_state_prestige(void) {
   s_game.data.max_unlock_milestone = 0;
   s_game.data.progress_ms = 0;
   s_game.data.prestige_level++;
+  s_game.current_boost_milli = 0;
+  s_game.target_boost_milli = 0;
+  s_game.boost_sustain_remaining_ms = 0;
   s_game.view_mode = VIEW_MODE_TIER1;
   s_game.meld_anim_running = false;
   s_game.meld_anim_ms = 0;
@@ -1829,6 +1901,8 @@ const char* game_state_get_clock_style_name(uint8_t style_idx) {
     case 3: return "7-Segment Digital";
     case 4: return "Word Clock";
     case 5: return "Now Clock";
+    case 6: return "Large Digital";
+    case 7: return "Roman Analogue";
     default: return "Big Digital";
   }
 }
@@ -2075,12 +2149,7 @@ uint32_t game_state_get_active_save_crowns(void) {
 
 #if ENABLE_DEV_MENU
 void game_state_dev_add_crown(void) {
-  s_global_data.crowns += 1;
-  s_global_data.total_crowns_earned += 1;
-  prv_save_global_config();
-  if (s_game.data.crowns < MAX_CROWNS_PER_SAVE) {
-    s_game.data.crowns += 1;
-  }
+  s_game.data.crowns += 1;
   game_state_save();
 }
 #endif

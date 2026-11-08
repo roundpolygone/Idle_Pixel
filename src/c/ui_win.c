@@ -138,10 +138,10 @@ static void prv_win_update_proc(Layer *layer, GContext *ctx) {
 
   char stats_buf[220];
   snprintf(stats_buf, sizeof(stats_buf),
-           "Time: %s (Away %s)\nCrowns: %lu | Unlocks: %lu\nEarned: %s | Spent: %s",
+           "Time: %s (Away %s)\nRun CRW: %lu (Stock: %lu)\nEarned: %s | Spent: %s",
            total_time_str, away_str,
-           (unsigned long)game_state_get_global_crowns(),
-           (unsigned long)game_state_get_total_unlocks_count(),
+           (unsigned long)game_state_get_active_save_crowns(),
+           (unsigned long)game_state_get_available_crowns(),
            earned_str, spent_str);
 
   graphics_context_set_text_color(ctx, GColorLightGray);
@@ -200,24 +200,8 @@ static void prv_new_save_click_handler(ClickRecognizerRef recognizer, void *cont
   if (s_win_window) {
     window_stack_pop(false);
   }
-  // Find first unused slot
-  uint8_t empty_slot = 0xFF;
-  for (uint8_t i = 0; i < NUM_SAVE_SLOTS; i++) {
-    SaveSlotInfo info;
-    game_state_get_slot_info(i, &info);
-    if (!info.is_used) {
-      empty_slot = i;
-      break;
-    }
-  }
-
-  if (empty_slot != 0xFF) {
-    game_state_start_new_run_in_slot(empty_slot);
-    game_state_vibe_short();
-  } else {
-    // If all slots are full, show save slots manager so user can choose
-    ui_save_slots_show();
-  }
+  game_state_archive_and_start_new_run();
+  game_state_vibe_short();
 }
 
 static void prv_click_config_provider(void *context) {

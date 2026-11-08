@@ -6,55 +6,58 @@ static Window *s_slots_window = NULL;
 static Layer *s_header_layer = NULL;
 static MenuLayer *s_slots_menu_layer = NULL;
 
-static Window *s_action_window = NULL;
-static MenuLayer *s_action_menu_layer = NULL;
-static uint8_t s_selected_slot = 0;
-
-static uint8_t s_used_slots[NUM_SAVE_SLOTS];
-static uint16_t s_used_count = 0;
+static Window *s_confirm_window = NULL;
+static MenuLayer *s_confirm_menu_layer = NULL;
 
 static MenuNavConfig s_slots_nav_cfg;
-static MenuNavConfig s_action_nav_cfg;
+static MenuNavConfig s_confirm_nav_cfg;
 
-static void prv_refresh_used_slots(void) {
-  s_used_count = 0;
-  for (uint8_t i = 0; i < NUM_SAVE_SLOTS; i++) {
-    SaveSlotInfo info;
-    game_state_get_slot_info(i, &info);
-    if (info.is_used) {
-      s_used_slots[s_used_count++] = i;
-    }
+static void prv_format_play_time(uint32_t dur_sec, char *buf, size_t buf_size) {
+  uint32_t mins = dur_sec / 60;
+  uint32_t hours = mins / 60;
+  mins = mins % 60;
+  if (hours > 0) {
+    snprintf(buf, buf_size, "%luh %lum", (unsigned long)hours, (unsigned long)mins);
+  } else {
+    snprintf(buf, buf_size, "%lum %lus", (unsigned long)mins, (unsigned long)(dur_sec % 60));
   }
 }
 
 // -------------------------------------------------------------
-// Header Layer: Slots Used & Crowns Unspent/Earned
+// Header Layer: Archived Count & Usable (+Pending) Crowns
 // -------------------------------------------------------------
 static void prv_header_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 
-  // Left: slots used
+  // Left: archived runs count
   char slots_buf[32];
-  snprintf(slots_buf, sizeof(slots_buf), "Saves: %u/%d", s_used_count, NUM_SAVE_SLOTS);
+  uint16_t archived_count = game_state_get_archived_count();
+  snprintf(slots_buf, sizeof(slots_buf), "Archived: %u", (unsigned int)archived_count);
   graphics_context_set_text_color(ctx, GColorWhite);
   graphics_draw_text(ctx, slots_buf,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(6, 1, (bounds.size.w * 55) / 100 - 6, 20),
+                     GRect(6, 1, (bounds.size.w * 52) / 100 - 6, 20),
                      GTextOverflowModeTrailingEllipsis,
                      GTextAlignmentLeft,
                      NULL);
 
-  // Right: crowns unspent/earned
+  // Right: usable crowns (+ pending crowns in active save)
   char crowns_buf[32];
-  uint32_t unspent = game_state_get_available_crowns();
-  uint32_t earned = game_state_get_total_crowns_earned();
-  snprintf(crowns_buf, sizeof(crowns_buf), "\xF0\x9F\x91\x91 %lu/%lu", (unsigned long)unspent, (unsigned long)earned);
+  uint32_t usable = game_state_get_available_crowns();
+  uint32_t pending = game_state_get_active_save_crowns();
+  if (pending > 0) {
+    snprintf(crowns_buf, sizeof(crowns_buf), "\xF0\x9F\x91\x91 %lu (+%lu)",
+             (unsigned long)usable, (unsigned long)pending);
+  } else {
+    snprintf(crowns_buf, sizeof(crowns_buf), "\xF0\x9F\x91\x91 %lu Stock",
+             (unsigned long)usable);
+  }
   graphics_context_set_text_color(ctx, PBL_IF_COLOR_ELSE(GColorYellow, GColorWhite));
   graphics_draw_text(ctx, crowns_buf,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect((bounds.size.w * 55) / 100, 1, (bounds.size.w * 45) / 100 - 6, 20),
+                     GRect((bounds.size.w * 52) / 100, 1, (bounds.size.w * 48) / 100 - 6, 20),
                      GTextOverflowModeTrailingEllipsis,
                      GTextAlignmentRight,
                      NULL);
@@ -65,188 +68,184 @@ static void prv_header_update_proc(Layer *layer, GContext *ctx) {
 }
 
 // -------------------------------------------------------------
-// Slot Actions Sub-Menu: Load, Overwrite, Clear
+// New Save Confirmation Sub-Menu
 // -------------------------------------------------------------
-static uint16_t prv_action_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
-  return 3;
+static uint16_t prv_confirm_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
+  return 2;
 }
 
-static void prv_action_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
-  switch (cell_index->row) {
-    case 0:
-      ui_menu_cell_basic_draw(ctx, cell_layer, "> Load Slot", "Switch to this save", NULL);
-      break;
-    case 1:
-      ui_menu_cell_basic_draw(ctx, cell_layer, "> Overwrite Slot", "Save current game over this slot", NULL);
-      break;
-    case 2:
-      ui_menu_cell_basic_draw(ctx, cell_layer, "> Clear Slot", "Delete this save file", NULL);
-      break;
-    default:
-      break;
+static void prv_confirm_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
+  uint32_t pending = game_state_get_active_save_crowns();
+
+  if (cell_index->row == 0) {
+    char sub_buf[64];
+    if (pending == 1) {
+      snprintf(sub_buf, sizeof(sub_buf), "Release +1 \xF0\x9F\x91\x91 to stock & archive");
+    } else if (pending > 1) {
+      snprintf(sub_buf, sizeof(sub_buf), "Release +%lu \xF0\x9F\x91\x91 to stock & archive", (unsigned long)pending);
+    } else {
+      snprintf(sub_buf, sizeof(sub_buf), "Archive current run (0 \xF0\x9F\x91\x91)");
+    }
+    ui_menu_cell_basic_draw(ctx, cell_layer, "> Confirm New Save", sub_buf, NULL);
+  } else {
+    ui_menu_cell_basic_draw(ctx, cell_layer, "< Cancel", "Keep playing current save", NULL);
   }
 }
 
-static void prv_action_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
-  switch (cell_index->row) {
-    case 0: // Load
-      game_state_switch_to_slot(s_selected_slot);
-      game_state_vibe_short();
-      idle_pixel_pop_to_root();
-      break;
-    case 1: // Overwrite
-      game_state_save_to_slot(s_selected_slot);
-      game_state_vibe_short();
-      window_stack_pop(true);
-      prv_refresh_used_slots();
-      if (s_slots_menu_layer) menu_layer_reload_data(s_slots_menu_layer);
-      if (s_header_layer) layer_mark_dirty(s_header_layer);
-      break;
-    case 2: // Clear
-      game_state_clear_slot(s_selected_slot);
-      game_state_vibe_double();
-      window_stack_pop(true);
-      prv_refresh_used_slots();
-      if (s_slots_menu_layer) {
-        MenuIndex sel = menu_layer_get_selected_index(s_slots_menu_layer);
-        uint16_t num_rows = s_used_count + (s_used_count < NUM_SAVE_SLOTS ? 1 : 0);
-        if (sel.row >= num_rows && num_rows > 0) {
-          sel.row = num_rows - 1;
-          menu_layer_set_selected_index(s_slots_menu_layer, sel, MenuRowAlignCenter, false);
-        }
-        menu_layer_reload_data(s_slots_menu_layer);
-      }
-      if (s_header_layer) layer_mark_dirty(s_header_layer);
-      break;
-    default:
-      break;
+static void prv_confirm_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  if (cell_index->row == 0) {
+    game_state_archive_and_start_new_run();
+    game_state_vibe_double();
+    idle_pixel_pop_to_root();
+  } else {
+    window_stack_pop(true);
   }
 }
 
-static uint16_t prv_action_get_row_count(void) {
-  return 3;
+static uint16_t prv_confirm_get_row_count(void) {
+  return 2;
 }
 
-static void prv_action_window_load(Window *window) {
+static void prv_confirm_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
 
-  s_action_menu_layer = menu_layer_create(bounds);
-  menu_layer_set_callbacks(s_action_menu_layer, NULL, (MenuLayerCallbacks) {
-    .get_num_rows = prv_action_get_num_rows,
-    .draw_row = prv_action_draw_row,
-    .select_click = prv_action_select_callback,
+  s_confirm_menu_layer = menu_layer_create(bounds);
+  menu_layer_set_callbacks(s_confirm_menu_layer, NULL, (MenuLayerCallbacks) {
+    .get_num_rows = prv_confirm_get_num_rows,
+    .draw_row = prv_confirm_draw_row,
+    .select_click = prv_confirm_select_callback,
   });
-  ui_menu_bind_navigation(window, s_action_menu_layer, &s_action_nav_cfg, prv_action_get_row_count);
-  layer_add_child(window_layer, menu_layer_get_layer(s_action_menu_layer));
+  ui_menu_bind_navigation(window, s_confirm_menu_layer, &s_confirm_nav_cfg, prv_confirm_get_row_count);
+  layer_add_child(window_layer, menu_layer_get_layer(s_confirm_menu_layer));
 }
 
-static void prv_action_window_unload(Window *window) {
-  ui_menu_unbind_navigation(&s_action_nav_cfg);
-  menu_layer_destroy(s_action_menu_layer);
-  s_action_menu_layer = NULL;
-  window_destroy(s_action_window);
-  s_action_window = NULL;
+static void prv_confirm_window_unload(Window *window) {
+  ui_menu_unbind_navigation(&s_confirm_nav_cfg);
+  menu_layer_destroy(s_confirm_menu_layer);
+  s_confirm_menu_layer = NULL;
+  window_destroy(s_confirm_window);
+  s_confirm_window = NULL;
 }
 
-static void prv_show_slot_action(uint8_t slot_idx) {
-  s_selected_slot = slot_idx;
-  if (s_action_window) return;
-  s_action_window = window_create();
-  window_set_window_handlers(s_action_window, (WindowHandlers) {
-    .load = prv_action_window_load,
-    .unload = prv_action_window_unload,
+static void prv_show_new_save_confirm(void) {
+  if (s_confirm_window) return;
+  s_confirm_window = window_create();
+  window_set_window_handlers(s_confirm_window, (WindowHandlers) {
+    .load = prv_confirm_window_load,
+    .unload = prv_confirm_window_unload,
   });
-  window_stack_push(s_action_window, true);
+  window_stack_push(s_confirm_window, true);
 }
 
 // -------------------------------------------------------------
-// Slots List Menu
+// Save Slots & Archived Runs List Menu
+// Row 0: + Start New Save
+// Row 1: Current Active Save
+// Rows 2+: Condensed Archived Runs (Read-Only)
 // -------------------------------------------------------------
 static uint16_t prv_slots_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
-  return s_used_count + (s_used_count < NUM_SAVE_SLOTS ? 1 : 0);
+  return 2 + game_state_get_archived_count();
+}
+
+static int16_t prv_slots_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  if (cell_index->row < 2) {
+    return 44;
+  }
+  return 26; // Condensed single-line height for archived saves
 }
 
 static void prv_slots_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
-  if (cell_index->row < s_used_count) {
-    uint8_t slot_idx = s_used_slots[cell_index->row];
-    SaveSlotInfo info;
-    game_state_get_slot_info(slot_idx, &info);
-
-    char title_buf[48];
+  if (cell_index->row == 0) {
+    // Top of the list: + Start New Save
+    uint32_t pending = game_state_get_active_save_crowns();
     char sub_buf[64];
-
-    bool is_active = (slot_idx == game_state_get_active_slot());
-
-    // Format date started
-    struct tm *time_info = localtime(&info.date_started);
-    char date_str[24];
-    if (info.date_started > 0 && time_info) {
-      strftime(date_str, sizeof(date_str), "%b %d", time_info);
+    if (pending > 0) {
+      snprintf(sub_buf, sizeof(sub_buf), "Archive & release \xF0\x9F\x91\x91 %lu to stock", (unsigned long)pending);
     } else {
-      snprintf(date_str, sizeof(date_str), "Started");
+      snprintf(sub_buf, sizeof(sub_buf), "Archive current & start fresh");
     }
+    ui_menu_cell_basic_draw(ctx, cell_layer, "+ Start New Save", sub_buf, NULL);
+    return;
+  }
 
-    if (is_active) {
-      snprintf(title_buf, sizeof(title_buf), "Save %u: %s [Active]", (unsigned int)(slot_idx + 1), date_str);
-    } else {
-      snprintf(title_buf, sizeof(title_buf), "Save %u: %s", (unsigned int)(slot_idx + 1), date_str);
-    }
+  if (cell_index->row == 1) {
+    // Current Active Run
+    GameState *game = game_state_get();
+    uint32_t total_sec = game->data.active_play_sec + game->data.offline_play_sec;
+    char time_str[24];
+    prv_format_play_time(total_sec, time_str, sizeof(time_str));
 
-    // Format duration & crown earned status
-    uint32_t dur_sec = info.is_completed ? info.completion_time_sec : info.total_time_sec;
-    uint32_t mins = dur_sec / 60;
-    uint32_t hours = mins / 60;
-    mins = mins % 60;
+    char title_buf[40];
+    snprintf(title_buf, sizeof(title_buf), "Run #%u [Active]",
+             (unsigned int)game_state_get_current_run_number());
 
-    uint32_t slot_crowns = info.crowns;
-    if (slot_crowns == 0 && info.is_completed) {
-      slot_crowns = 1;
-    }
-
-    if (slot_crowns >= MAX_CROWNS_PER_SAVE) {
-      snprintf(sub_buf, sizeof(sub_buf), "\xF0\x9F\x91\x91 2/2 (MAX) | %luh %lum", (unsigned long)hours, (unsigned long)mins);
-    } else if (slot_crowns == 1) {
-      snprintf(sub_buf, sizeof(sub_buf), "\xF0\x9F\x91\x91 1/2 Crown | %luh %lum", (unsigned long)hours, (unsigned long)mins);
-    } else {
-      snprintf(sub_buf, sizeof(sub_buf), "0/2 Crowns | %luh %lum", (unsigned long)hours, (unsigned long)mins);
-    }
+    char sub_buf[64];
+    snprintf(sub_buf, sizeof(sub_buf), "%s | \xF0\x9F\x91\x91 %lu Pending",
+             time_str, (unsigned long)game->data.crowns);
 
     ui_menu_cell_basic_draw(ctx, cell_layer, title_buf, sub_buf, NULL);
-  } else {
-    // Plus button to add a new save
-    ui_menu_cell_basic_draw(ctx, cell_layer, "+ Add New Save", "Start a new run", NULL);
+    return;
   }
+
+  // Condensed Archived Run Row (Read-Only)
+  uint16_t archive_idx = (uint16_t)(cell_index->row - 2);
+  ArchivedSaveEntry entry;
+  if (!game_state_get_archived_save(archive_idx, &entry)) return;
+
+  GRect bounds = layer_get_bounds(cell_layer);
+  bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
+
+  // Fill background when highlighted
+  graphics_context_set_fill_color(ctx, highlighted ? GColorWhite : GColorBlack);
+  graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+
+  GColor text_col = highlighted ? GColorBlack : GColorLightGray;
+  GColor crown_col = highlighted ? GColorBlack : PBL_IF_COLOR_ELSE(GColorYellow, GColorWhite);
+
+  char time_str[24];
+  prv_format_play_time(entry.total_time_sec, time_str, sizeof(time_str));
+
+  char left_buf[40];
+  snprintf(left_buf, sizeof(left_buf), "#%u  %s",
+           (unsigned int)entry.run_number, time_str);
+
+  char right_buf[24];
+  snprintf(right_buf, sizeof(right_buf), "\xF0\x9F\x91\x91 %u", (unsigned int)entry.crowns);
+
+  int margin = PBL_IF_ROUND_ELSE(18, 6);
+  graphics_context_set_text_color(ctx, text_col);
+  graphics_draw_text(ctx, left_buf,
+                     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                     GRect(margin, 1, bounds.size.w - (margin * 2) - 48, bounds.size.h - 2),
+                     GTextOverflowModeTrailingEllipsis,
+                     GTextAlignmentLeft,
+                     NULL);
+
+  graphics_context_set_text_color(ctx, crown_col);
+  graphics_draw_text(ctx, right_buf,
+                     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                     GRect(bounds.size.w - margin - 54, 1, 54, bounds.size.h - 2),
+                     GTextOverflowModeTrailingEllipsis,
+                     GTextAlignmentRight,
+                     NULL);
 }
 
 static void prv_slots_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
-  if (cell_index->row < s_used_count) {
-    uint8_t slot_idx = s_used_slots[cell_index->row];
-    prv_show_slot_action(slot_idx);
+  ui_menu_reset_inactivity_timer();
+  if (cell_index->row == 0) {
+    prv_show_new_save_confirm();
   } else {
-    // Find first unused slot
-    uint8_t new_slot = 0;
-    for (uint8_t i = 0; i < NUM_SAVE_SLOTS; i++) {
-      SaveSlotInfo info;
-      game_state_get_slot_info(i, &info);
-      if (!info.is_used) {
-        new_slot = i;
-        break;
-      }
-    }
-    game_state_start_new_run_in_slot(new_slot);
-    game_state_vibe_short();
-    idle_pixel_pop_to_root();
+    // Active run and archived runs are read-only in this list
+    game_state_weak_vibe();
   }
 }
 
 static uint16_t prv_slots_get_row_count(void) {
-  return s_used_count + (s_used_count < NUM_SAVE_SLOTS ? 1 : 0);
+  return 2 + game_state_get_archived_count();
 }
 
 static void prv_slots_window_load(Window *window) {
-  prv_refresh_used_slots();
-
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
 
@@ -259,6 +258,7 @@ static void prv_slots_window_load(Window *window) {
   s_slots_menu_layer = menu_layer_create(GRect(0, 24, bounds.size.w, bounds.size.h - 24));
   menu_layer_set_callbacks(s_slots_menu_layer, NULL, (MenuLayerCallbacks) {
     .get_num_rows = prv_slots_get_num_rows,
+    .get_cell_height = prv_slots_get_cell_height,
     .draw_row = prv_slots_draw_row,
     .select_click = prv_slots_select_callback,
   });

@@ -17,13 +17,22 @@
 
 #define SAVE_VERSION 14
 #define NUM_SAVE_SLOTS 64
-#define MAX_CROWNS_PER_SAVE 2
+#define MAX_ARCHIVED_SAVES 64
+#define PERSIST_KEY_ARCHIVE_META   93
+#define PERSIST_KEY_ARCHIVE_PART1  94
+#define PERSIST_KEY_ARCHIVE_PART2  95
 #define PERSIST_KEY_GLOBAL_CONFIG 96
 #define PERSIST_KEY_GLOBAL_CROWNS 98
 #define PERSIST_KEY_GLOBAL_GOLD_PIXELS 98 // legacy alias
 #define PERSIST_KEY_ACTIVE_SLOT 99
 #define PERSIST_KEY_GAME_DATA 100
 #define PERSIST_KEY_SLOT_BASE 101 // Slots 101 .. 164
+
+typedef struct __attribute__((__packed__)) {
+  uint32_t total_time_sec;
+  uint16_t crowns;
+  uint16_t run_number;
+} ArchivedSaveEntry;
 
 typedef struct __attribute__((__packed__)) {
   uint32_t version;
@@ -43,14 +52,15 @@ typedef struct __attribute__((__packed__)) {
   uint8_t  upgrade_auto_buy_lvl;    // Crown item: auto-buy cheapest normal upgrade
 } GlobalAppData;
 
-// Unlockable cosmetics: 19 background colors, 7 fill orders, 3 fonts, 3 font sizes, 5 clock styles (36 total unlocks)
+// Unlockable cosmetics: 19 background colors, 7 fill orders, 3 fonts, 3 font sizes, 7 clock styles (38 total unlocks)
+#define STARTING_HEADSTART_CENTS_PER_LVL 50
 #define UNLOCK_BG_COLORS_COUNT 19
 #define BG_COLOR_AUTO 255
 #define UNLOCK_FILL_ORDERS_COUNT 7
 #define UNLOCK_FONTS_COUNT 3
 #define UNLOCK_FONT_SIZES_COUNT 3
-#define UNLOCK_CLOCK_STYLES_COUNT 5
-#define TOTAL_MAX_UNLOCKS 36
+#define UNLOCK_CLOCK_STYLES_COUNT 7
+#define TOTAL_MAX_UNLOCKS 38
 
 typedef enum {
   FILL_ORDER_NORMAL = 0,
@@ -195,12 +205,16 @@ void game_state_hard_reset(void);
 // Currency formatting helper
 void game_state_format_currency(uint32_t cents, char *buf, size_t buf_size);
 
-// Save slot management
+// Save slot & archive management
 uint8_t game_state_get_active_slot(void);
 void game_state_get_slot_info(uint8_t slot_idx, SaveSlotInfo *out_info);
 bool game_state_switch_to_slot(uint8_t slot_idx);
 bool game_state_save_to_slot(uint8_t slot_idx);
 bool game_state_clear_slot(uint8_t slot_idx);
+void game_state_archive_and_start_new_run(void);
+uint16_t game_state_get_archived_count(void);
+bool game_state_get_archived_save(uint16_t index, ArchivedSaveEntry *out_entry);
+uint16_t game_state_get_current_run_number(void);
 
 // View mode controls
 GridViewMode game_state_get_view_mode(void);

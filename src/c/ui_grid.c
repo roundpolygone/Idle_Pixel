@@ -94,9 +94,16 @@ static void prv_draw_tier2_view(Layer *layer, GContext *ctx) {
   }
 
   // 3. Header
-  char header_buf[32];
-  uint32_t crw = game_state_get_global_crowns();
-  if (crw > 0) {
+  char header_buf[48];
+  uint32_t crw = game_state_get_available_crowns();
+  uint32_t pending_crw = game_state_get_active_save_crowns();
+  if (crw > 0 && pending_crw > 0) {
+    snprintf(header_buf, sizeof(header_buf), "COLOURS | CRW %lu(+%lu)",
+             (unsigned long)crw, (unsigned long)pending_crw);
+  } else if (pending_crw > 0) {
+    snprintf(header_buf, sizeof(header_buf), "COLOURS | CRW +%lu",
+             (unsigned long)pending_crw);
+  } else if (crw > 0) {
     snprintf(header_buf, sizeof(header_buf), "COLOURS | CRW %lu", (unsigned long)crw);
   } else {
     snprintf(header_buf, sizeof(header_buf), "COLOURS (64)");
@@ -207,7 +214,7 @@ static void prv_draw_tier2_view(Layer *layer, GContext *ctx) {
                      GTextOverflowModeWordWrap,
                      GTextAlignmentCenter,
                      NULL);
-  graphics_draw_text(ctx, "> Menu | ^ Hold for Clock",
+  graphics_draw_text(ctx, "> Menu | ^ Clock",
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      GRect(card_x, line2_y, card_w, 13),
                      GTextOverflowModeWordWrap,
@@ -419,9 +426,18 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
   }
 
   // 4. Header: Active Color & Crowns
-  char header_buf[32];
-  uint32_t crw = game_state_get_global_crowns();
-  if (crw > 0) {
+  char header_buf[48];
+  uint32_t crw = game_state_get_available_crowns();
+  uint32_t pending_crw = game_state_get_active_save_crowns();
+  if (crw > 0 && pending_crw > 0) {
+    snprintf(header_buf, sizeof(header_buf), "COL %u/64 | CRW %lu(+%lu)",
+             (unsigned int)(game->data.current_color_idx + 1),
+             (unsigned long)crw, (unsigned long)pending_crw);
+  } else if (pending_crw > 0) {
+    snprintf(header_buf, sizeof(header_buf), "COL %u/64 | CRW +%lu",
+             (unsigned int)(game->data.current_color_idx + 1),
+             (unsigned long)pending_crw);
+  } else if (crw > 0) {
     snprintf(header_buf, sizeof(header_buf), "COL %u/64 | CRW %lu",
              (unsigned int)(game->data.current_color_idx + 1),
              (unsigned long)crw);
@@ -562,7 +578,7 @@ static void ui_grid_update_proc(Layer *layer, GContext *ctx) {
   graphics_draw_rect(ctx, card_rect);
 
   graphics_context_set_text_color(ctx, GColorWhite);
-  graphics_draw_text(ctx, "^ Colours (Hold: Clock)",
+  graphics_draw_text(ctx, "^ Colours",
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      GRect(card_x, line1_y, card_w, 13),
                      GTextOverflowModeWordWrap,

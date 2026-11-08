@@ -29,11 +29,45 @@ static MenuNavConfig s_prestige_confirm_nav_cfg;
 #define MARQUEE_TICK_MS 50
 #define MARQUEE_START_PAUSE_TICKS 25
 #define MARQUEE_END_PAUSE_TICKS 25
+#define MENU_INACTIVITY_TIMEOUT_MS 30000
 
 static MenuNavConfig *s_active_nav_cfg = NULL;
+static uint32_t s_menu_idle_ms = 0;
+static Window *s_last_observed_top_window = NULL;
+
+void ui_menu_reset_inactivity_timer(void) {
+  s_menu_idle_ms = 0;
+}
+
+void ui_menu_tick_inactivity(uint32_t dt_ms) {
+  Window *top = window_stack_get_top_window();
+  if (top != s_last_observed_top_window) {
+    s_last_observed_top_window = top;
+    s_menu_idle_ms = 0;
+  }
+
+  // Only time out when a menu/subwindow is open (never on main root window or clock window)
+  if (!top || top == idle_pixel_get_main_window() || game_state_is_clock_active()) {
+    s_menu_idle_ms = 0;
+    return;
+  }
+
+  s_menu_idle_ms += dt_ms;
+  if (s_menu_idle_ms >= MENU_INACTIVITY_TIMEOUT_MS) {
+    s_menu_idle_ms = 0;
+    idle_pixel_pop_to_root();
+  }
+}
 
 void ui_menu_draw_text_marquee(GContext *ctx, const char *text, GFont font, GRect box, GColor color, bool is_highlighted) {
   if (!text || !text[0]) return;
+
+  GSize size = graphics_text_layout_get_content_size(text, font, GRect(0, 0, 2000, box.size.h + 10), GTextOverflowModeWordWrap, GTextAlignmentLeft);
+  if (size.w + 4 <= box.size.w) {
+    graphics_context_set_text_color(ctx, color);
+    graphics_draw_text(ctx, text, font, GRect(box.origin.x, box.origin.y, box.size.w + 4, box.size.h + 6), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+    return;
+  }
 
   if (!is_highlighted) {
     graphics_context_set_text_color(ctx, color);
@@ -41,14 +75,7 @@ void ui_menu_draw_text_marquee(GContext *ctx, const char *text, GFont font, GRec
     return;
   }
 
-  GSize size = graphics_text_layout_get_content_size(text, font, GRect(0, 0, 2000, box.size.h + 10), GTextOverflowModeWordWrap, GTextAlignmentLeft);
-  if (size.w <= box.size.w) {
-    graphics_context_set_text_color(ctx, color);
-    graphics_draw_text(ctx, text, font, box, GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
-    return;
-  }
-
-  int max_scroll = size.w - box.size.w + 12;
+  int max_scroll = size.w - box.size.w + 16;
   if (s_active_nav_cfg && max_scroll > s_active_nav_cfg->max_scroll) {
     s_active_nav_cfg->max_scroll = max_scroll;
   }
@@ -56,7 +83,7 @@ void ui_menu_draw_text_marquee(GContext *ctx, const char *text, GFont font, GRec
   int offset = (s_active_nav_cfg != NULL) ? s_active_nav_cfg->marquee_offset : 0;
   if (offset > max_scroll) offset = max_scroll;
 
-  GRect draw_box = GRect(box.origin.x - offset, box.origin.y, size.w + 20, box.size.h);
+  GRect draw_box = GRect(box.origin.x - offset, box.origin.y, size.w + 100, box.size.h + 10);
   graphics_context_set_text_color(ctx, color);
   graphics_draw_text(ctx, text, font, draw_box, GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
 }
@@ -64,10 +91,6 @@ void ui_menu_draw_text_marquee(GContext *ctx, const char *text, GFont font, GRec
 void ui_menu_cell_basic_draw(GContext *ctx, const Layer *cell_layer, const char *title,
                              const char *subtitle, GBitmap *icon) {
   bool is_highlighted = menu_cell_layer_is_highlighted(cell_layer);
-  if (!is_highlighted) {
-    menu_cell_basic_draw(ctx, cell_layer, title, subtitle, icon);
-    return;
-  }
 
   GRect bounds = layer_get_bounds(cell_layer);
   int left_margin = (icon != NULL) ? 36 : PBL_IF_ROUND_ELSE(18, 6);
@@ -75,47 +98,36 @@ void ui_menu_cell_basic_draw(GContext *ctx, const Layer *cell_layer, const char 
   int avail_w = bounds.size.w - left_margin - right_margin;
 
   bool has_sub = (subtitle != NULL && subtitle[0] != '\0');
-  GFont title_font = fonts_get_system_font(has_sub ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_28_BOLD);
-  GFont sub_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+  bool is_large_cell = (bounds.size.h >= 50);
+  GFont title_font = fonts_get_system_font(is_large_cell ? FONT_KEY_GOTHIC_28_BOLD : (has_sub ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_28_BOLD));
+  GFont sub_font = fonts_get_system_font(is_large_cell ? FONT_KEY_GOTHIC_24 : FONT_KEY_GOTHIC_18);
+  GColor text_color = is_highlighted ? GColorWhite : GColorBlack;
 
-  GSize title_size = (title && title[0]) ?
-      graphics_text_layout_get_content_size(title, title_font, GRect(0, 0, 2000, 30), GTextOverflowModeWordWrap, GTextAlignmentLeft) :
-      (GSize){0, 0};
-  GSize sub_size = has_sub ?
-      graphics_text_layout_get_content_size(subtitle, sub_font, GRect(0, 0, 2000, 30), GTextOverflowModeWordWrap, GTextAlignmentLeft) :
-      (GSize){0, 0};
+  // Draw standard highlight background & optional icon without default text
+  menu_cell_basic_draw(ctx, cell_layer, "", NULL, icon);
 
-  bool title_truncated = (title && title_size.w > avail_w);
-  bool sub_truncated = (has_sub && sub_size.w > avail_w);
-
-  if (!title_truncated && !sub_truncated) {
-    menu_cell_basic_draw(ctx, cell_layer, title, subtitle, icon);
-    if (s_active_nav_cfg) {
-      s_active_nav_cfg->max_scroll = 0;
-    }
-    return;
+  if (is_highlighted && s_active_nav_cfg) {
+    s_active_nav_cfg->max_scroll = 0;
   }
 
-  menu_cell_basic_draw(ctx, cell_layer, "", "", icon);
-
   if (has_sub) {
-    int y_title = (bounds.size.h >= 50) ? 3 : 1;
-    int y_sub = (bounds.size.h >= 50) ? 27 : 23;
-    int h_title = y_sub - y_title;
+    int y_title = is_large_cell ? 0 : -1;
+    int y_sub = is_large_cell ? 26 : 22;
+    int h_title = is_large_cell ? 30 : 25;
     int h_sub = bounds.size.h - y_sub;
 
     if (title && title[0]) {
       GRect title_box = GRect(left_margin, y_title, avail_w, h_title);
-      ui_menu_draw_text_marquee(ctx, title, title_font, title_box, GColorWhite, true);
+      ui_menu_draw_text_marquee(ctx, title, title_font, title_box, text_color, is_highlighted);
     }
 
     GRect sub_box = GRect(left_margin, y_sub, avail_w, h_sub);
-    ui_menu_draw_text_marquee(ctx, subtitle, sub_font, sub_box, GColorWhite, true);
+    ui_menu_draw_text_marquee(ctx, subtitle, sub_font, sub_box, text_color, is_highlighted);
   } else {
     if (title && title[0]) {
-      int y_title = (bounds.size.h - 28) / 2;
-      GRect title_box = GRect(left_margin, y_title, avail_w, 28);
-      ui_menu_draw_text_marquee(ctx, title, title_font, title_box, GColorWhite, true);
+      int y_title = (bounds.size.h - 28) / 2 - 2;
+      GRect title_box = GRect(left_margin, y_title, avail_w, 30);
+      ui_menu_draw_text_marquee(ctx, title, title_font, title_box, text_color, is_highlighted);
     }
   }
 }
@@ -123,10 +135,6 @@ void ui_menu_cell_basic_draw(GContext *ctx, const Layer *cell_layer, const char 
 static void prv_marquee_timer_callback(void *data) {
   MenuNavConfig *cfg = (MenuNavConfig*)data;
   if (!cfg || !cfg->window || !cfg->menu_layer) return;
-  if (game_state_get_power_saving()) {
-    cfg->marquee_timer = NULL;
-    return;
-  }
   if (!window_stack_contains_window(cfg->window)) {
     cfg->marquee_timer = NULL;
     return;
@@ -195,6 +203,7 @@ static void prv_menu_nav_reset_marquee(MenuNavConfig *cfg) {
 }
 
 static void prv_menu_nav_up_handler(ClickRecognizerRef recognizer, void *context) {
+  ui_menu_reset_inactivity_timer();
   MenuNavConfig *cfg = (MenuNavConfig*)context;
   if (!cfg || !cfg->menu_layer || !cfg->get_num_rows) return;
   uint16_t rows = cfg->get_num_rows();
@@ -211,6 +220,7 @@ static void prv_menu_nav_up_handler(ClickRecognizerRef recognizer, void *context
 }
 
 static void prv_menu_nav_down_handler(ClickRecognizerRef recognizer, void *context) {
+  ui_menu_reset_inactivity_timer();
   MenuNavConfig *cfg = (MenuNavConfig*)context;
   if (!cfg || !cfg->menu_layer || !cfg->get_num_rows) return;
   uint16_t rows = cfg->get_num_rows();
@@ -249,6 +259,7 @@ void ui_menu_unbind_navigation(MenuNavConfig *cfg) {
 }
 
 void ui_menu_bind_navigation(Window *window, MenuLayer *menu_layer, MenuNavConfig *cfg, uint16_t (*get_num_rows)(void)) {
+  ui_menu_reset_inactivity_timer();
   menu_layer_set_click_config_onto_window(menu_layer, window);
   cfg->window = window;
   cfg->menu_layer = menu_layer;
@@ -263,9 +274,7 @@ void ui_menu_bind_navigation(Window *window, MenuLayer *menu_layer, MenuNavConfi
     app_timer_cancel(cfg->marquee_timer);
     cfg->marquee_timer = NULL;
   }
-  if (!game_state_get_power_saving()) {
-    cfg->marquee_timer = app_timer_register(MARQUEE_TICK_MS, prv_marquee_timer_callback, cfg);
-  }
+  cfg->marquee_timer = app_timer_register(MARQUEE_TICK_MS, prv_marquee_timer_callback, cfg);
 }
 
 // =============================================================
@@ -383,6 +392,7 @@ static void prv_store_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex
 }
 
 static void prv_store_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  ui_menu_reset_inactivity_timer();
   UpgradeId id = (UpgradeId)cell_index->row;
   bool bought = game_state_buy_upgrade(id);
   if (bought) {
@@ -555,6 +565,7 @@ static void prv_options_draw_row(GContext *ctx, const Layer *cell_layer, MenuInd
 }
 
 static void prv_options_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  ui_menu_reset_inactivity_timer();
   GameState *game = game_state_get();
 
   switch (cell_index->row) {
@@ -679,6 +690,7 @@ static void prv_main_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuI
 }
 
 static void prv_main_menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  ui_menu_reset_inactivity_timer();
   switch (cell_index->row) {
     case 0: // Prestige
       if (game_state_can_prestige()) {

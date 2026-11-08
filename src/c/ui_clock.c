@@ -527,6 +527,227 @@ static void prv_draw_now_clock(GContext *ctx, GRect bounds, struct tm *tick_time
 }
 
 // -------------------------------------------------------------
+// Style 6: Large Digital Clock (Full-height solid block digits)
+// -------------------------------------------------------------
+static void prv_draw_large_block_digit(GContext *ctx, int x, int y, int w, int h, int t, uint8_t digit, GColor col) {
+  if (digit > 9) return;
+  uint8_t mask = s_7seg_masks[digit];
+  int mid_y = y + (h - t) / 2;
+  int top_Seg_h = (h + t) / 2;
+  int bot_seg_h = h - mid_y + y;
+  int r = (t >= 6) ? 3 : 2;
+
+  graphics_context_set_fill_color(ctx, col);
+
+  // Special clean centered pillar for '1'
+  if (digit == 1) {
+    int cx = x + (w - t) / 2;
+    graphics_fill_rect(ctx, GRect(cx, y, t, h), r, GCornersAll);
+    graphics_fill_rect(ctx, GRect(cx - t / 2, y, t + t / 2, t), r, GCornersAll);
+    graphics_fill_rect(ctx, GRect(x + 2, y + h - t, w - 4, t), r, GCornersAll);
+    return;
+  }
+
+  // Solid overlapping rounded-corner strokes for continuous giant block typography
+  if (mask & 0x01) { // Top horizontal
+    graphics_fill_rect(ctx, GRect(x, y, w, t), r, GCornersAll);
+  }
+  if (mask & 0x02) { // Top-right vertical
+    graphics_fill_rect(ctx, GRect(x + w - t, y, t, top_Seg_h), r, GCornersAll);
+  }
+  if (mask & 0x04) { // Bottom-right vertical
+    graphics_fill_rect(ctx, GRect(x + w - t, mid_y, t, bot_seg_h), r, GCornersAll);
+  }
+  if (mask & 0x08) { // Bottom horizontal
+    graphics_fill_rect(ctx, GRect(x, y + h - t, w, t), r, GCornersAll);
+  }
+  if (mask & 0x10) { // Bottom-left vertical
+    graphics_fill_rect(ctx, GRect(x, mid_y, t, bot_seg_h), r, GCornersAll);
+  }
+  if (mask & 0x20) { // Top-left vertical
+    graphics_fill_rect(ctx, GRect(x, y, t, top_Seg_h), r, GCornersAll);
+  }
+  if (mask & 0x40) { // Middle horizontal
+    graphics_fill_rect(ctx, GRect(x, mid_y, w, t), r, GCornersAll);
+  }
+}
+
+static void prv_draw_large_digital(GContext *ctx, GRect bounds, struct tm *tick_time, uint8_t size_idx, bool is_24h, GColor fg_color, GColor accent_color) {
+  int hour = tick_time->tm_hour;
+  if (!is_24h) {
+    hour = hour % 12;
+    if (hour == 0) hour = 12;
+  }
+  int h1 = hour / 10;
+  int h2 = hour % 10;
+  int m1 = tick_time->tm_min / 10;
+  int m2 = tick_time->tm_min % 10;
+
+  bool show_leading_hour = is_24h || (h1 > 0);
+  int num_digits = show_leading_hour ? 4 : 3;
+
+  int dw, dh, dt, gap, colon_w;
+  if (bounds.size.w >= 200) {
+    dw = (num_digits == 3) ? 48 : 38;
+    dh = (size_idx == 1) ? 156 : ((size_idx == 2) ? 116 : 138);
+    dt = (size_idx == 1) ? 11 : ((size_idx == 2) ? 8 : 10);
+    gap = 6;
+    colon_w = 14;
+  } else {
+    dw = (num_digits == 3) ? 36 : 29;
+    dh = (size_idx == 1) ? 118 : ((size_idx == 2) ? 88 : 104);
+    dt = (size_idx == 1) ? 8 : ((size_idx == 2) ? 6 : 7);
+    gap = 4;
+    colon_w = 10;
+  }
+
+  int total_w = (num_digits * dw) + ((num_digits - 2) * gap) + colon_w;
+  int start_x = (bounds.size.w - total_w) / 2;
+  int avail_h = bounds.size.h - 24;
+  int start_y = (avail_h - dh) / 2;
+  if (start_y < 4) start_y = 4;
+
+  int cur_x = start_x;
+  if (show_leading_hour) {
+    prv_draw_large_block_digit(ctx, cur_x, start_y, dw, dh, dt, (uint8_t)h1, fg_color);
+    cur_x += dw + gap;
+  }
+
+  prv_draw_large_block_digit(ctx, cur_x, start_y, dw, dh, dt, (uint8_t)h2, fg_color);
+  cur_x += dw;
+
+  // Bold center colon
+  int dot_size = dt;
+  int col_x = cur_x + (colon_w - dot_size) / 2;
+  graphics_context_set_fill_color(ctx, accent_color);
+  graphics_fill_rect(ctx, GRect(col_x, start_y + (dh / 3) - dot_size / 2, dot_size, dot_size), 2, GCornersAll);
+  graphics_fill_rect(ctx, GRect(col_x, start_y + ((dh * 2) / 3) - dot_size / 2, dot_size, dot_size), 2, GCornersAll);
+  cur_x += colon_w;
+
+  prv_draw_large_block_digit(ctx, cur_x, start_y, dw, dh, dt, (uint8_t)m1, fg_color);
+  cur_x += dw + gap;
+  prv_draw_large_block_digit(ctx, cur_x, start_y, dw, dh, dt, (uint8_t)m2, fg_color);
+
+  // Seconds progress bar underneath the giant digits when Seconds option is ON
+  if (game_state_get()->data.option_show_seconds) {
+    int bar_y = start_y + dh + 4;
+    if (bar_y < avail_h - 2) {
+      int fill_w = (tick_time->tm_sec * total_w) / 59;
+      graphics_context_set_fill_color(ctx, accent_color);
+      graphics_fill_rect(ctx, GRect(start_x, bar_y, fill_w, 3), 1, GCornersAll);
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// Style 7: Roman Numeral Analogue Clock
+// -------------------------------------------------------------
+static const char * const s_roman_numerals[12] = {
+  "XII", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI"
+};
+
+static void prv_draw_roman_analogue(GContext *ctx, GRect bounds, struct tm *tick_time, uint8_t size_idx, GColor fg_color, GColor accent_color) {
+  GPoint center = grect_center_point(&bounds);
+  center.y -= 11;
+
+  int16_t min_dim = (bounds.size.w < bounds.size.h ? bounds.size.w : bounds.size.h);
+  int16_t radius = (min_dim / 2) - 6;
+
+  int border_w = (size_idx == 1) ? 3 : ((size_idx == 2) ? 1 : 2);
+  int hour_hand_w = (size_idx == 1) ? 5 : ((size_idx == 2) ? 2 : 4);
+  int min_hand_w = (size_idx == 1) ? 3 : ((size_idx == 2) ? 1 : 2);
+  int sec_hand_w = (size_idx == 1) ? 2 : 1;
+
+  // Outer circular bezel
+  graphics_context_set_stroke_color(ctx, fg_color);
+  graphics_context_set_stroke_width(ctx, border_w);
+  graphics_draw_circle(ctx, center, radius);
+
+  // 12 hour ticks and Roman numerals around the dial
+  GFont cardinal_font = (size_idx == 1 || bounds.size.w >= 200)
+                        ? fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD)
+                        : fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+  GFont regular_font = (bounds.size.w >= 200 && size_idx != 2)
+                       ? fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD)
+                       : fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+
+  int16_t tick_outer = radius - 1;
+  int16_t tick_inner_cardinal = radius - 6;
+  int16_t tick_inner_regular = radius - 4;
+  int16_t num_dist = radius - (bounds.size.w >= 200 ? 18 : 14);
+
+  graphics_context_set_text_color(ctx, fg_color);
+  for (int i = 0; i < 12; i++) {
+    int32_t angle = (TRIG_MAX_ANGLE * i) / 12;
+    bool is_cardinal = (i % 3 == 0);
+    int16_t t_in = is_cardinal ? tick_inner_cardinal : tick_inner_regular;
+
+    GPoint p_out = {
+      .x = (int16_t)(sin_lookup(angle) * tick_outer / TRIG_MAX_RATIO) + center.x,
+      .y = (int16_t)(-cos_lookup(angle) * tick_outer / TRIG_MAX_RATIO) + center.y,
+    };
+    GPoint p_in = {
+      .x = (int16_t)(sin_lookup(angle) * t_in / TRIG_MAX_RATIO) + center.x,
+      .y = (int16_t)(-cos_lookup(angle) * t_in / TRIG_MAX_RATIO) + center.y,
+    };
+    graphics_context_set_stroke_width(ctx, is_cardinal ? 2 : 1);
+    graphics_draw_line(ctx, p_out, p_in);
+
+    int16_t nx = (int16_t)(sin_lookup(angle) * num_dist / TRIG_MAX_RATIO) + center.x;
+    int16_t ny = (int16_t)(-cos_lookup(angle) * num_dist / TRIG_MAX_RATIO) + center.y;
+
+    GFont font_to_use = is_cardinal ? cardinal_font : regular_font;
+    int y_off = (font_to_use == fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD)) ? 11 : 9;
+    graphics_draw_text(ctx, s_roman_numerals[i], font_to_use,
+                       GRect(nx - 16, ny - y_off, 32, 18),
+                       GTextOverflowModeWordWrap,
+                       GTextAlignmentCenter,
+                       NULL);
+  }
+
+  // Hour Hand
+  int32_t hour_angle = (TRIG_MAX_ANGLE * (((tick_time->tm_hour % 12) * 6) + (tick_time->tm_min / 10))) / (12 * 6);
+  int16_t hour_len = radius * 46 / 100;
+  GPoint hour_pt = {
+    .x = (int16_t)(sin_lookup(hour_angle) * hour_len / TRIG_MAX_RATIO) + center.x,
+    .y = (int16_t)(-cos_lookup(hour_angle) * hour_len / TRIG_MAX_RATIO) + center.y,
+  };
+  graphics_context_set_stroke_color(ctx, fg_color);
+  graphics_context_set_stroke_width(ctx, hour_hand_w);
+  graphics_draw_line(ctx, center, hour_pt);
+
+  // Minute Hand
+  int32_t min_angle = (TRIG_MAX_ANGLE * tick_time->tm_min) / 60;
+  int16_t min_len = radius * 68 / 100;
+  GPoint min_pt = {
+    .x = (int16_t)(sin_lookup(min_angle) * min_len / TRIG_MAX_RATIO) + center.x,
+    .y = (int16_t)(-cos_lookup(min_angle) * min_len / TRIG_MAX_RATIO) + center.y,
+  };
+  graphics_context_set_stroke_width(ctx, min_hand_w);
+  graphics_draw_line(ctx, center, min_pt);
+
+  // Second Hand (if enabled in options)
+  if (game_state_get()->data.option_show_seconds) {
+    int32_t sec_angle = (TRIG_MAX_ANGLE * tick_time->tm_sec) / 60;
+    int16_t sec_len = radius * 76 / 100;
+    GPoint sec_pt = {
+      .x = (int16_t)(sin_lookup(sec_angle) * sec_len / TRIG_MAX_RATIO) + center.x,
+      .y = (int16_t)(-cos_lookup(sec_angle) * sec_len / TRIG_MAX_RATIO) + center.y,
+    };
+    graphics_context_set_stroke_color(ctx, accent_color);
+    graphics_context_set_stroke_width(ctx, sec_hand_w);
+    graphics_draw_line(ctx, center, sec_pt);
+  }
+
+  // Center pin
+  int pin_r = (size_idx == 1) ? 5 : ((size_idx == 2) ? 3 : 4);
+  graphics_context_set_fill_color(ctx, fg_color);
+  graphics_fill_circle(ctx, center, pin_r);
+  graphics_context_set_fill_color(ctx, accent_color);
+  graphics_fill_circle(ctx, center, 1);
+}
+
+// -------------------------------------------------------------
 // Clock Layer Update Proc
 // -------------------------------------------------------------
 static void prv_clock_update_proc(Layer *layer, GContext *ctx) {
@@ -611,6 +832,12 @@ static void prv_clock_update_proc(Layer *layer, GContext *ctx) {
     case 5:
       prv_draw_now_clock(ctx, bounds, tick_time, font_idx, size_idx, fg_color, accent_color);
       break;
+    case 6:
+      prv_draw_large_digital(ctx, bounds, tick_time, size_idx, game->data.option_24h, fg_color, accent_color);
+      break;
+    case 7:
+      prv_draw_roman_analogue(ctx, bounds, tick_time, size_idx, fg_color, accent_color);
+      break;
     case 0:
     default:
       prv_draw_big_digital(ctx, bounds, tick_time, game->data.option_24h, font_idx, size_idx, fg_color);
@@ -621,13 +848,14 @@ static void prv_clock_update_proc(Layer *layer, GContext *ctx) {
   char stats_buf[48];
   uint32_t boost_whole = 0, boost_tenths = 0;
   game_state_get_current_boost_parts(&boost_whole, &boost_tenths);
+  uint32_t total_boost_whole = boost_whole + game_state_get_clock_boost_percent();
 
-  if (game->current_boost_milli > 0) {
+  if (total_boost_whole > 0 || game->current_boost_milli > 0) {
     snprintf(stats_buf, sizeof(stats_buf), "PX %lu CLR %u CRN %lu | +%lu%%",
              (unsigned long)game->data.current_pixels,
              (unsigned int)(game->data.current_color_idx + 1),
              (unsigned long)game_state_get_available_crowns(),
-             (unsigned long)boost_whole);
+             (unsigned long)total_boost_whole);
   } else {
     snprintf(stats_buf, sizeof(stats_buf), "PX %lu CLR %u CRN %lu | 0%%",
              (unsigned long)game->data.current_pixels,

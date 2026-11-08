@@ -38,6 +38,9 @@ static void prv_timer_callback(void *data) {
   bool pixel_added = false;
   bool fill_completed = false;
 
+  // Auto-close open menus after 30 seconds of inactivity (excludes clock window)
+  ui_menu_tick_inactivity(tick_interval);
+
   // Advance zoom transition if active
   if (ui_grid_is_zooming()) {
     ui_grid_tick_zoom(tick_interval);
@@ -103,15 +106,13 @@ static void prv_timer_callback(void *data) {
 }
 
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
-  // Up button smoothly zooms out to Tier 2 grid
-  if (game_state_get_view_mode() == VIEW_MODE_TIER1) {
+  // From Tier 1 (home screen), UP zooms out to Tier 2; from Tier 2, UP opens the Clock
+  if (game_state_get_view_mode() == VIEW_MODE_TIER1 && !ui_grid_is_zooming()) {
     ui_grid_start_zoom_out();
+  } else {
+    game_state_set_view_mode(VIEW_MODE_TIER2);
+    ui_clock_show();
   }
-}
-
-static void prv_up_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
-  // Hold UP for clock face
-  ui_clock_show();
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -157,9 +158,8 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *context)
 static void prv_click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_BACK, prv_back_click_handler);
 
-  // UP button: Single click to zoom out, hold for Clock
+  // UP button: Single click zooms out to Tier 2, then opens Clock
   window_single_click_subscribe(BUTTON_ID_UP, prv_up_click_handler);
-  window_long_click_subscribe(BUTTON_ID_UP, 500, prv_up_long_click_down_handler, NULL);
 
   window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
 

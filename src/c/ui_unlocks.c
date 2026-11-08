@@ -305,6 +305,7 @@ static void prv_color_selection_changed(MenuLayer *menu_layer, MenuIndex new_ind
 }
 
 static void prv_color_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  ui_menu_reset_inactivity_timer();
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_bg_colors < UNLOCK_BG_COLORS_COUNT);
   int buy_offset = can_buy ? 1 : 0;
@@ -476,6 +477,7 @@ static void prv_font_selection_changed(MenuLayer *menu_layer, MenuIndex new_inde
 }
 
 static void prv_font_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  ui_menu_reset_inactivity_timer();
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_fonts <= UNLOCK_FONTS_COUNT);
 
@@ -579,6 +581,7 @@ static void prv_fill_order_draw_row(GContext *ctx, const Layer *cell_layer, Menu
 }
 
 static void prv_fill_order_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  ui_menu_reset_inactivity_timer();
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_fill_orders <= UNLOCK_FILL_ORDERS_COUNT);
 
@@ -668,6 +671,7 @@ static void prv_clock_style_draw_row(GContext *ctx, const Layer *cell_layer, Men
 }
 
 static void prv_clock_style_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  ui_menu_reset_inactivity_timer();
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_clock_styles <= UNLOCK_CLOCK_STYLES_COUNT);
 
@@ -757,6 +761,7 @@ static void prv_font_size_draw_row(GContext *ctx, const Layer *cell_layer, MenuI
 }
 
 static void prv_font_size_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  ui_menu_reset_inactivity_timer();
   GameState *game = game_state_get();
   bool can_buy = (game->data.unlocked_font_sizes < UNLOCK_FONT_SIZES_COUNT);
 
@@ -904,9 +909,9 @@ static void prv_unlocks_draw_row(GContext *ctx, const Layer *cell_layer, MenuInd
       char sub[48];
       if (game->data.unlocked_clock_styles <= UNLOCK_CLOCK_STYLES_COUNT) {
         const char *next_name = game_state_get_clock_style_name(game->data.unlocked_clock_styles);
-        snprintf(sub, sizeof(sub), "Next: %s (1 Pt) | %d/6", next_name, game->data.unlocked_clock_styles);
+        snprintf(sub, sizeof(sub), "Next: %s (1 Pt) | %d/8", next_name, game->data.unlocked_clock_styles);
       } else {
-        snprintf(sub, sizeof(sub), "All 6 Unlocked");
+        snprintf(sub, sizeof(sub), "All 8 Unlocked");
       }
       ui_menu_cell_basic_draw(ctx, cell_layer, "Clock Styles", sub, NULL);
       break;

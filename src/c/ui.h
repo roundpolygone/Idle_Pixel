@@ -33,6 +33,8 @@ typedef struct MenuNavConfig {
 
 void ui_menu_bind_navigation(Window *window, MenuLayer *menu_layer, MenuNavConfig *cfg, uint16_t (*get_num_rows)(void));
 void ui_menu_unbind_navigation(MenuNavConfig *cfg);
+void ui_menu_reset_inactivity_timer(void);
+void ui_menu_tick_inactivity(uint32_t dt_ms);
 
 // Marquee Text & Cell Drawing
 void ui_menu_draw_text_marquee(GContext *ctx, const char *text, GFont font, GRect box, GColor color, bool is_highlighted);
